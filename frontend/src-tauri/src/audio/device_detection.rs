@@ -403,11 +403,19 @@ pub fn calculate_buffer_timeout(
         return min_timeout;
     }
 
-    // Calculate base timeout from reported buffer size
-    let base = Duration::from_secs_f64(buffer_size as f64 / sample_rate as f64);
+    // Calculate base timeout from reported buffer size.
+    //
+    // Integer nanoseconds, not floats: `Duration::from_secs_f64(3840.0 / 48000.0)`
+    // followed by `mul_f32(2.0)` produced 159.999996ms instead of 160ms, because f32
+    // carries only ~7 significant digits. The value is exactly representable as an
+    // integer, so compute it as one.
+    let base_nanos = (buffer_size as u64)
+        .saturating_mul(1_000_000_000)
+        / (sample_rate as u64);
+    let base = Duration::from_nanos(base_nanos);
 
     // Add 2x headroom for jitter (Cap's strategy)
-    let with_headroom = base.mul_f32(2.0);
+    let with_headroom = base * 2;
 
     // Clamp to device-specific range
     clamp_duration(with_headroom, min_timeout, max_timeout)
