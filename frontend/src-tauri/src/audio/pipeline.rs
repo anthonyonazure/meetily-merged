@@ -163,13 +163,18 @@ impl ProfessionalAudioMixer {
             let mic = mic_window.get(i).copied().unwrap_or(0.0);
             let sys = sys_window.get(i).copied().unwrap_or(0.0);
 
-            // Pre-scale system audio to 70% to leave headroom
-            // This prevents constant soft scaling which can cause pumping artifacts
-            // Mic is normalized to -23 LUFS (already optimal), system needs reduction
-            let sys_scaled = sys * 1.0;
-            let _mic_scaled = mic * 0.8;  // Reserved for future mic scaling
+            // Pre-scale system audio to leave headroom for the mic.
+            //
+            // This used to say 70% but actually apply `sys * 1.0` — system audio ran at
+            // FULL level. Since VAD and the ASR both see this mixed signal, loud system
+            // audio pushed the sum past ±1.0, and the soft-scaling below then dragged
+            // the mic component down with it: quiet speech went undetected while a
+            // meeting was playing. The mic is already normalized to -23 LUFS, so the
+            // headroom has to come from the system side.
+            const SYSTEM_HEADROOM_GAIN: f32 = 0.7;
+            let sys_scaled = sys * SYSTEM_HEADROOM_GAIN;
 
-            // Sum without ducking - mic stays at full volume, system slightly reduced
+            // Sum without ducking - mic stays at full volume, system is attenuated
             let sum = mic + sys_scaled;
 
             // CRITICAL FIX: Soft scaling prevents distortion artifacts

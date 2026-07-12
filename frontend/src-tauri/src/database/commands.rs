@@ -93,7 +93,13 @@ pub async fn check_default_legacy_database(app: AppHandle) -> Result<Option<Stri
     let legacy_db = app_data_dir.join("meeting_minutes.db");
     info!("Checking for default legacy database at: {:?}", legacy_db);
 
-    if legacy_db.exists() && legacy_db.is_file() {
+    // A zero-byte file is not a database. Reporting one prompts the user to "import"
+    // nothing, and worse, it is a candidate for being copied over the live DB.
+    let has_data = std::fs::metadata(&legacy_db)
+        .map(|m| m.is_file() && m.len() > 0)
+        .unwrap_or(false);
+
+    if has_data {
         let path_str = legacy_db.to_string_lossy().to_string();
         info!("Found default legacy database: {}", path_str);
         Ok(Some(path_str))

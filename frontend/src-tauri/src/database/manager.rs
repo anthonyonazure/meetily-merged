@@ -17,7 +17,15 @@ impl DatabaseManager {
         }
 
         if !Path::new(tauri_db_path).exists() {
-            if Path::new(backend_db_path).exists() {
+            // Only adopt the legacy DB if it actually holds something. An empty file at
+            // this path is not a database — anything that merely *touches* it (the
+            // sqlite3 CLI creates a 0-byte file on open, for instance) would otherwise
+            // get copied over as the user's meeting history.
+            let legacy_has_data = fs::metadata(backend_db_path)
+                .map(|m| m.is_file() && m.len() > 0)
+                .unwrap_or(false);
+
+            if legacy_has_data {
                 log::info!(
                     "Copying database from {} to {}",
                     backend_db_path,
@@ -25,6 +33,12 @@ impl DatabaseManager {
                 );
                 fs::copy(backend_db_path, tauri_db_path).map_err(|e| sqlx::Error::Io(e))?;
             } else {
+                if Path::new(backend_db_path).exists() {
+                    log::warn!(
+                        "Ignoring empty legacy database at {} — starting fresh",
+                        backend_db_path
+                    );
+                }
                 log::info!("Creating database at {}", tauri_db_path);
                 Sqlite::create_database(tauri_db_path).await?;
             }

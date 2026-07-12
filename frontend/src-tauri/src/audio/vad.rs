@@ -50,10 +50,15 @@ impl ContinuousVadProcessor {
         config.pre_speech_pad = Duration::from_millis(300);   // Pre-speech padding for context
         config.post_speech_pad = Duration::from_millis(400);  // Increased: more context at end
 
-        // CRITICAL FIX: Increased min_speech_time to prevent tiny 40ms fragments
-        // Previous: 100ms allowed too-short segments that Whisper rejects
-        // New: 250ms ensures segments are substantial enough for Whisper (>100ms requirement)
-        config.min_speech_time = Duration::from_millis(250);  // Prevent tiny fragments
+        // Minimum speech duration. Anything shorter is DISCARDED, so this directly
+        // decides whether short interjections survive.
+        //
+        // 250ms was silently eating one-word replies — 「嗯」「好」「对」, "yes", "OK" —
+        // which is a real loss in a meeting transcript. 120ms still clears Whisper's
+        // ~100ms floor (the reason the value was raised in the first place) and is well
+        // above the 40ms fragments this guard exists to reject. SenseVoice has no such
+        // floor at all.
+        config.min_speech_time = Duration::from_millis(120);
 
         debug!("Creating VAD session with: sample_rate={}Hz, redemption={}ms, min_speech={}ms, input_rate={}Hz",
                VAD_SAMPLE_RATE, redemption_time_ms, 250, input_sample_rate);
@@ -306,10 +311,14 @@ pub fn extract_speech_16k(samples_mono_16k: &[f32]) -> Result<Vec<f32>> {
         let rms = input_energy.sqrt();
         let peak = samples_mono_16k.iter().map(|&x| x.abs()).fold(0.0f32, f32::max);
 
-        // BALANCED FIX: Lowered thresholds to preserve quiet speech while still filtering silence
-        // Previous aggressive values (0.08/0.15) were discarding valid quiet speech
-        // New values (0.03/0.08) are more balanced - catch quiet speech, reject pure silence
-        if rms < 0.2 || peak < 0.20 {
+        // Fallback energy gate, used only when VAD extracted almost nothing.
+        //
+        // NB: the comment here used to claim thresholds of 0.03/0.08 "to catch quiet
+        // speech" while the code actually gated at 0.2/0.20 — roughly 7x higher, and
+        // well above normal speech (RMS ~0.02-0.1). The values below are the real ones.
+        // This is the legacy `extract_speech_16k` path; live recording goes through
+        // ContinuousVadProcessor and never reaches here.
+        if rms < 0.03 || peak < 0.08 {
             info!("-----VAD detected silence/noise (RMS: {:.6}, Peak: {:.6}), skipping to prevent hallucinations-----", rms, peak);
             return Ok(Vec::new());
         } else {
