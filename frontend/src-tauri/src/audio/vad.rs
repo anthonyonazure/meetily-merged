@@ -23,7 +23,15 @@ pub struct ContinuousVadProcessor {
     current_speech: Vec<f32>,
     in_speech: bool,
     processed_samples: usize,
-    speech_start_sample: usize,
+    /// Absolute session time at which the segment being accumulated begins, in ms.
+    ///
+    /// Silero's own `timestamp_ms` is already absolute session time, so this simply
+    /// tracks it — and, after a force-cut, advances past the audio we have emitted. It
+    /// replaces a `speech_start_sample` counter that was set to
+    /// `processed_samples + timestamp_ms * 16`, i.e. an absolute sample position plus the
+    /// same position again: it double-counted, so every force-cut segment was stamped at
+    /// roughly twice its true offset.
+    current_segment_start_ms: f64,
     // State tracking for smart logging
     last_logged_state: bool,
     /// True once this speech run has been force-cut by the max-duration guard.
@@ -65,40 +73,79 @@ pub fn vad_redemption_ms() -> u32 {
     VAD_REDEMPTION_MS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Silero VAD only runs at 16kHz — this is a hard requirement of the model.
+const VAD_SAMPLE_RATE: u32 = 16000;
+
+/// Duration of `len` samples at the VAD rate, in milliseconds.
+fn samples_to_ms(len: usize) -> f64 {
+    (len as f64 / VAD_SAMPLE_RATE as f64) * 1000.0
+}
+
+/// Build the Silero config for a given pause length.
+///
+/// Split out from `ContinuousVadProcessor::new` so the pad invariant below can be
+/// asserted across the whole settings range without loading the ONNX model each time.
+fn build_vad_config(redemption_time_ms: u32) -> VadConfig {
+    let mut config = VadConfig::default();
+    config.sample_rate = VAD_SAMPLE_RATE as usize;
+
+    // Silero's own thresholds: lenient enough to ride through natural pauses without
+    // fragmenting continuous speech into 40ms shards.
+    config.positive_speech_threshold = 0.50;
+    config.negative_speech_threshold = 0.35;
+
+    config.redemption_time = Duration::from_millis(redemption_time_ms as u64);
+
+    // CRASH GUARD: neither pad may exceed redemption_time. Silero does not enforce this
+    // and *panics* if it is violated, taking the whole audio pipeline down mid-recording
+    // — which is exactly what happened once the pause length became user-tunable.
+    //
+    // On SpeechEnd, silero:
+    //   1. slices out `[speech_start - pre_pad .. speech_end + post_pad]`, and
+    //   2. drains its buffer up to `speech_end`.
+    //
+    // But SpeechEnd only fires after `redemption_time` of silence, so:
+    //   * only ~redemption_time of audio exists *after* speech_end — a larger post_pad
+    //     indexes past the end of the buffer;
+    //   * the next utterance can begin ~redemption_time after that drain, so a larger
+    //     pre_pad reaches back into audio that has already been dropped.
+    // Both paths panic (`get_speech`, silero lib.rs:465-478).
+    //
+    // The old config (redemption 400 / pre 300 / post 400) held only by luck. Letting the
+    // user shorten the pause to 180ms broke it: the pad asked for 400ms of audio that did
+    // not exist yet, the pipeline task died, and the transcript stopped dead a few seconds
+    // into the meeting while the recording appeared to carry on.
+    //
+    // Silero's own defaults (redemption 600 / pre 600 / post 0) respect the same rule.
+    let pad_ceiling_ms = redemption_time_ms as u64;
+    config.pre_speech_pad = Duration::from_millis(pad_ceiling_ms.min(300)); // lead-in context
+    config.post_speech_pad = Duration::from_millis(pad_ceiling_ms.min(400)); // trailing context
+
+    // Minimum speech duration. Anything shorter is DISCARDED, so this directly decides
+    // whether short interjections survive.
+    //
+    // 250ms was silently eating one-word replies — 「嗯」「好」「对」, "yes", "OK" — which
+    // is a real loss in a meeting transcript. 120ms still clears Whisper's ~100ms floor
+    // (the reason the value was raised in the first place) and is well above the 40ms
+    // fragments this guard exists to reject. SenseVoice has no such floor at all.
+    config.min_speech_time = Duration::from_millis(120);
+
+    config
+}
+
 impl ContinuousVadProcessor {
     pub fn new(input_sample_rate: u32, redemption_time_ms: u32) -> Result<Self> {
-        // Silero VAD MUST use 16kHz - this is hardcoded requirement
-        const VAD_SAMPLE_RATE: u32 = 16000;
+        let config = build_vad_config(redemption_time_ms);
 
-        // Use STRICT settings to prevent silence from reaching Whisper
-        let mut config = VadConfig::default();
-        config.sample_rate = VAD_SAMPLE_RATE as usize;
-
-        // CONTINUOUS SPEECH FIX: Tuned for capturing complete 5+ second utterances
-        // Previous: 0.55/0.40 with 400ms redemption was fragmenting speech into 40ms segments
-        // New: More lenient thresholds + longer redemption for continuous speech
-        config.positive_speech_threshold = 0.50;  // Silero default - good for continuous speech
-        config.negative_speech_threshold = 0.35;  // Silero default - allows natural pauses
-
-        // CRITICAL FIX: Removed redemption_time capping to support long continuous speech
-        // Previous: capped at 400ms, causing VAD to fragment 5-second speech into 40ms segments
-        // New: Use full redemption_time from pipeline (2000ms) to bridge natural pauses
-        config.redemption_time = Duration::from_millis(redemption_time_ms as u64);
-        config.pre_speech_pad = Duration::from_millis(300);   // Pre-speech padding for context
-        config.post_speech_pad = Duration::from_millis(400);  // Increased: more context at end
-
-        // Minimum speech duration. Anything shorter is DISCARDED, so this directly
-        // decides whether short interjections survive.
-        //
-        // 250ms was silently eating one-word replies — 「嗯」「好」「对」, "yes", "OK" —
-        // which is a real loss in a meeting transcript. 120ms still clears Whisper's
-        // ~100ms floor (the reason the value was raised in the first place) and is well
-        // above the 40ms fragments this guard exists to reject. SenseVoice has no such
-        // floor at all.
-        config.min_speech_time = Duration::from_millis(120);
-
-        debug!("Creating VAD session with: sample_rate={}Hz, redemption={}ms, min_speech={}ms, input_rate={}Hz",
-               VAD_SAMPLE_RATE, redemption_time_ms, 250, input_sample_rate);
+        debug!(
+            "Creating VAD session with: sample_rate={}Hz, redemption={}ms, pre_pad={}ms, post_pad={}ms, min_speech={}ms, input_rate={}Hz",
+            VAD_SAMPLE_RATE,
+            redemption_time_ms,
+            config.pre_speech_pad.as_millis(),
+            config.post_speech_pad.as_millis(),
+            config.min_speech_time.as_millis(),
+            input_sample_rate
+        );
 
         let session = VadSession::new(config)
             .map_err(|e| anyhow!("Failed to create VAD session: {:?}", e))?;
@@ -118,7 +165,7 @@ impl ContinuousVadProcessor {
             current_speech: Vec::new(),
             in_speech: false,
             processed_samples: 0,
-            speech_start_sample: 0,
+            current_segment_start_ms: 0.0,
             // Initialize state tracking
             last_logged_state: false,
             force_emitted_this_run: false,
@@ -225,9 +272,10 @@ impl ContinuousVadProcessor {
 
         // Force end any ongoing speech
         if self.in_speech && !self.current_speech.is_empty() {
-            // processed_samples and speech_start_sample always count 16kHz samples (post-resampling)
-            let start_ms = (self.speech_start_sample as f64 / 16000.0) * 1000.0;
-            let end_ms = (self.processed_samples as f64 / 16000.0) * 1000.0;
+            // Derive the span from the audio we actually hold, so it stays consistent with
+            // the samples even when this run was already force-cut.
+            let start_ms = self.current_segment_start_ms;
+            let end_ms = start_ms + samples_to_ms(self.current_speech.len());
 
             debug!("VAD flush: Force-ending speech - start={}ms, end={}ms, duration={}ms, samples={}",
                   start_ms, end_ms, end_ms - start_ms, self.current_speech.len());
@@ -279,8 +327,8 @@ impl ContinuousVadProcessor {
                         self.last_logged_state = true;
                     }
                     self.in_speech = true;
-                    // Use 16000 (VAD processing rate) since processed_samples counts 16kHz samples
-                    self.speech_start_sample = self.processed_samples + (timestamp_ms * 16000 / 1000);
+                    // Silero reports absolute session time, so take it as-is.
+                    self.current_segment_start_ms = timestamp_ms as f64;
                     self.current_speech.clear();
                     self.force_emitted_this_run = false;
                 }
@@ -296,24 +344,34 @@ impl ContinuousVadProcessor {
                     // accumulation. But once this run has been force-cut, the session's
                     // samples still contain the part we already emitted — taking them
                     // would transcribe that audio a second time.
-                    let speech_samples = if self.force_emitted_this_run {
-                        self.current_speech.clone()
+                    //
+                    // The timestamps must follow the samples. Silero reports the span of
+                    // the *whole* run, so after a force-cut its start is far earlier than
+                    // the remainder we are about to emit: a 2.1s tail was being stamped as
+                    // a 12.5s segment starting ten seconds too early, which lands the
+                    // transcript line at the wrong time and out of order.
+                    let (speech_samples, start_ms, end_ms) = if self.force_emitted_this_run {
+                        let samples = std::mem::take(&mut self.current_speech);
+                        let start = self.current_segment_start_ms;
+                        let end = start + samples_to_ms(samples.len());
+                        (samples, start, end)
                     } else if !samples.is_empty() {
-                        samples
+                        (samples, start_timestamp_ms as f64, end_timestamp_ms as f64)
                     } else {
-                        self.current_speech.clone()
+                        let samples = std::mem::take(&mut self.current_speech);
+                        (samples, start_timestamp_ms as f64, end_timestamp_ms as f64)
                     };
 
                     if !speech_samples.is_empty() {
                         let segment = SpeechSegment {
                             samples: speech_samples,
-                            start_timestamp_ms: start_timestamp_ms as f64,
-                            end_timestamp_ms: end_timestamp_ms as f64,
+                            start_timestamp_ms: start_ms,
+                            end_timestamp_ms: end_ms,
                             confidence: 0.9, // VAD confidence
                         };
 
                         info!("VAD: Completed speech segment: {:.1}ms duration, {} samples",
-                              end_timestamp_ms - start_timestamp_ms, segment.samples.len());
+                              end_ms - start_ms, segment.samples.len());
 
                         self.speech_segments.push_back(segment);
                     }
@@ -330,9 +388,9 @@ impl ContinuousVadProcessor {
             // Force a cut if the speaker has not paused for a long time, so the
             // transcript keeps appearing instead of waiting for them to stop.
             if self.current_speech.len() >= MAX_SEGMENT_SAMPLES {
-                let emitted_len = self.current_speech.len();
-                let start_ms = (self.speech_start_sample as f64 / 16000.0) * 1000.0;
-                let end_ms = start_ms + (emitted_len as f64 / 16000.0) * 1000.0;
+                let emitted_ms = samples_to_ms(self.current_speech.len());
+                let start_ms = self.current_segment_start_ms;
+                let end_ms = start_ms + emitted_ms;
 
                 info!(
                     "VAD: speech ran past {:.1}s without a pause — cutting so the transcript keeps up",
@@ -347,7 +405,7 @@ impl ContinuousVadProcessor {
                 });
 
                 // The next chunk of this run starts where this one ended.
-                self.speech_start_sample += emitted_len;
+                self.current_segment_start_ms = end_ms;
                 self.force_emitted_this_run = true;
             }
         }
@@ -632,6 +690,160 @@ mod tests {
 
         // Should find speech segments
         assert!(all_segments.len() >= 1, "Expected at least 1 speech segment");
+    }
+
+    /// speech / short gap / speech — the pattern that crashed the recording.
+    fn generate_speech_gap_speech(speech_ms: u32, gap_ms: u32, sample_rate: u32) -> Vec<f32> {
+        let tone = |samples: usize, offset: usize| -> Vec<f32> {
+            (0..samples)
+                .map(|i| {
+                    let time = (i + offset) as f32 / sample_rate as f32;
+                    let f1 = 200.0 + (time * 50.0).sin() * 100.0;
+                    0.3 * (0.5 * (2.0 * std::f32::consts::PI * f1 * time).sin()
+                        + 0.3 * (2.0 * std::f32::consts::PI * f1 * 2.0 * time).sin()
+                        + 0.2 * (2.0 * std::f32::consts::PI * f1 * 3.0 * time).sin())
+                })
+                .collect()
+        };
+
+        let speech_samples = (speech_ms as usize * sample_rate as usize) / 1000;
+        let gap_samples = (gap_ms as usize * sample_rate as usize) / 1000;
+
+        let mut audio = tone(speech_samples, 0);
+        audio.extend(std::iter::repeat(0.0).take(gap_samples));
+        audio.extend(tone(speech_samples, speech_samples + gap_samples));
+        // Trailing silence so the final utterance is closed out rather than left open.
+        audio.extend(std::iter::repeat(0.0).take(sample_rate as usize));
+        audio
+    }
+
+    /// Every pause length the user can pick must survive a real speech/pause/speech run.
+    ///
+    /// Silero panics — it does not error — when a pad reaches outside its audio buffer,
+    /// and that panic killed the pipeline task mid-meeting: the transcript stopped after
+    /// a few seconds while the recording appeared to carry on. Both pads are therefore
+    /// clamped to `redemption_time`, and this test walks the whole settings range plus a
+    /// gap short enough to exercise the buffer-drain edge. Before the clamp, 100ms and
+    /// 200ms panicked here.
+    #[test]
+    fn vad_does_not_panic_at_any_user_selectable_pause_length() {
+        let audio = generate_speech_gap_speech(1000, 250, 16000);
+
+        for redemption_ms in [
+            VAD_REDEMPTION_MIN_MS,
+            200, // the shipped default
+            300,
+            VAD_REDEMPTION_MAX_MS,
+        ] {
+            let segments = get_speech_chunks(&audio, redemption_ms)
+                .unwrap_or_else(|e| panic!("VAD failed at redemption={}ms: {}", redemption_ms, e));
+
+            assert!(
+                !segments.is_empty(),
+                "redemption={}ms found no speech at all",
+                redemption_ms
+            );
+            assert!(
+                segments.iter().all(|s| !s.samples.is_empty()),
+                "redemption={}ms emitted an empty segment",
+                redemption_ms
+            );
+        }
+    }
+
+    /// A force-cut segment's timestamps must describe the audio it actually carries.
+    ///
+    /// Continuous speech is cut every 5s so the transcript keeps flowing, and the pieces
+    /// used to be stamped from a `speech_start_sample` counter that added an absolute
+    /// sample position to the same position expressed in ms — it double-counted, so each
+    /// cut landed at roughly twice its true offset. These timestamps become the transcript
+    /// line's `audio_start_time`, so the lines were placed at the wrong time in the meeting.
+    ///
+    /// Driven white-box: Silero does not reliably classify synthetic tones as speech (the
+    /// 60s tone in the tests above yields a single 1.2s segment), so it cannot exercise a
+    /// 5s force-cut. The accumulator runs off our own `in_speech` flag, so setting it and
+    /// feeding audio reaches exactly the bookkeeping under test.
+    #[test]
+    fn force_cut_segments_are_stamped_to_match_their_audio() {
+        let mut processor = ContinuousVadProcessor::new(16000, 200).expect("VAD processor");
+
+        const SPEECH_STARTED_AT_MS: f64 = 1000.0;
+        processor.in_speech = true;
+        processor.current_segment_start_ms = SPEECH_STARTED_AT_MS;
+
+        // 12s of unbroken speech → two 5s force-cuts, with the remainder still buffered.
+        let segments = processor
+            .process_audio(&vec![0.05f32; 16_000 * 12])
+            .expect("VAD failed");
+
+        assert_eq!(
+            segments.len(),
+            2,
+            "12s of unbroken speech should be cut into two 5s segments, got {}",
+            segments.len()
+        );
+
+        let mut expected_start_ms = SPEECH_STARTED_AT_MS;
+        for (i, seg) in segments.iter().enumerate() {
+            let reported_ms = seg.end_timestamp_ms - seg.start_timestamp_ms;
+            let actual_ms = samples_to_ms(seg.samples.len());
+
+            assert!(
+                (reported_ms - actual_ms).abs() < 1.0,
+                "segment {} claims {:.0}ms but carries {:.0}ms of audio ({} samples)",
+                i,
+                reported_ms,
+                actual_ms,
+                seg.samples.len()
+            );
+            assert!(
+                (seg.start_timestamp_ms - expected_start_ms).abs() < 1.0,
+                "segment {} starts at {:.0}ms, expected {:.0}ms — cuts must be contiguous",
+                i,
+                seg.start_timestamp_ms,
+                expected_start_ms
+            );
+            expected_start_ms = seg.end_timestamp_ms;
+        }
+
+        // The tail carries on from where the last cut ended, rather than rewinding to the
+        // start of the run — this is the path that stamped a 2.1s tail as a 12.5s segment.
+        let tail = processor.flush().expect("flush failed");
+        assert_eq!(tail.len(), 1, "expected the buffered remainder to flush");
+        assert!(
+            (tail[0].start_timestamp_ms - expected_start_ms).abs() < 1.0,
+            "tail starts at {:.0}ms, expected {:.0}ms",
+            tail[0].start_timestamp_ms,
+            expected_start_ms
+        );
+        assert!(
+            (tail[0].end_timestamp_ms - tail[0].start_timestamp_ms
+                - samples_to_ms(tail[0].samples.len()))
+            .abs()
+                < 1.0,
+            "tail's span does not match the audio it carries"
+        );
+    }
+
+    /// The invariant behind the clamp above, asserted directly on the config.
+    #[test]
+    fn vad_pads_never_exceed_the_redemption_time() {
+        for redemption_ms in VAD_REDEMPTION_MIN_MS..=VAD_REDEMPTION_MAX_MS {
+            let config = build_vad_config(redemption_ms);
+
+            assert!(
+                config.pre_speech_pad <= config.redemption_time,
+                "pre_speech_pad {:?} exceeds redemption {:?} — silero would reach into drained audio",
+                config.pre_speech_pad,
+                config.redemption_time
+            );
+            assert!(
+                config.post_speech_pad <= config.redemption_time,
+                "post_speech_pad {:?} exceeds redemption {:?} — silero would index past its buffer",
+                config.post_speech_pad,
+                config.redemption_time
+            );
+        }
     }
 
     #[test]
