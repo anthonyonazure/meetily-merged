@@ -149,10 +149,34 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
             info!("✅ Remote transcription configuration valid");
             Ok(())
         }
+        "openai" => {
+            info!("🔍 Validating OpenAI transcription provider...");
+            let has_api_key = config
+                .api_key
+                .as_deref()
+                .map(|k| !k.trim().is_empty())
+                .unwrap_or(false);
+
+            if !has_api_key {
+                return Err(
+                    "OpenAI transcription requires an API key. Please add your OpenAI key in Settings > Transcription."
+                        .to_string(),
+                );
+            }
+
+            if config.model.trim().is_empty() {
+                return Err(
+                    "OpenAI transcription requires a model. Please select one in Settings > Transcription."
+                        .to_string(),
+                );
+            }
+
+            Ok(())
+        }
         other => {
             warn!("❌ Unsupported transcription provider for local recording: {}", other);
             Err(format!(
-                "Provider '{}' is not supported for local transcription. Please select 'localWhisper', 'parakeet', or 'remote'.",
+                "Provider '{}' is not supported for local transcription. Please select 'localWhisper', 'parakeet', 'remote', or 'openai'.",
                 other
             ))
         }
@@ -238,6 +262,26 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
             ).map_err(|e| format!("Failed to create remote transcription provider: {}", e))?;
             Ok(TranscriptionEngine::Provider(Arc::new(provider)))
         }
+        "openai" => {
+            info!("☁️ Initializing OpenAI transcription provider");
+
+            let api_key = config.api_key.clone().unwrap_or_default();
+            if api_key.trim().is_empty() {
+                return Err(
+                    "OpenAI transcription requires an API key. Please configure it in Settings > Transcription."
+                        .to_string(),
+                );
+            }
+
+            let model = if config.model.trim().is_empty() {
+                "gpt-4o-mini-transcribe".to_string()
+            } else {
+                config.model.clone()
+            };
+
+            let provider = super::openai_provider::OpenAIProvider::new(api_key, model);
+            Ok(TranscriptionEngine::Provider(Arc::new(provider)))
+        }
         "localWhisper" => {
             info!("🎤 Initializing Whisper transcription engine");
             let whisper_engine = get_or_init_whisper(app).await?;
@@ -245,7 +289,7 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
         }
         other => {
             Err(format!(
-                "Unsupported transcription provider '{}'. Supported: parakeet, localWhisper, remote.",
+                "Unsupported transcription provider '{}'. Supported: parakeet, localWhisper, remote, openai.",
                 other
             ))
         }

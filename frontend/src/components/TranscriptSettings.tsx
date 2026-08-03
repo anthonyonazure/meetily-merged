@@ -27,6 +27,10 @@ export interface TranscriptSettingsProps {
 
 const LOCAL_PROVIDERS = new Set<TranscriptModelProps['provider']>(['localWhisper', 'parakeet']);
 
+// One-click official OpenAI lane (endpoint hardcoded in the Rust provider).
+// Distinct from 'remote', which targets any custom OpenAI-compatible endpoint.
+const OPENAI_MODEL_OPTIONS = ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'];
+
 export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelConfig, onModelSelect }: TranscriptSettingsProps) {
     // Local draft state -- only pushed to context on Save (remote) or model select (local)
     const [uiProvider, setUiProvider] = useState<TranscriptModelProps['provider']>(transcriptModelConfig.provider);
@@ -162,6 +166,13 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                     setUiEndpointUrl(existingUrl);
                                     setUiModel(existingModel);
                                     fetchApiKey('remote');
+                                } else if (provider === 'openai') {
+                                    const existingModel = transcriptModelConfig.provider === 'openai' && transcriptModelConfig.model
+                                        ? transcriptModelConfig.model
+                                        : OPENAI_MODEL_OPTIONS[0];
+                                    setUiModel(existingModel);
+                                    setUiEndpointUrl('');
+                                    fetchApiKey('openai');
                                 } else if (LOCAL_PROVIDERS.has(provider)) {
                                     const existingModel = transcriptModelConfig.provider === provider
                                         ? transcriptModelConfig.model : '';
@@ -177,6 +188,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                 <SelectItem value="parakeet">Parakeet (Recommended - Real-time / Accurate)</SelectItem>
                                 <SelectItem value="localWhisper">Local Whisper (High Accuracy)</SelectItem>
                                 <SelectItem value="remote">Remote Transcription</SelectItem>
+                                <SelectItem value="openai">OpenAI API (Cloud)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -231,6 +243,28 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                             </p>
                         </div>
                     </>
+                )}
+
+                {uiProvider === 'openai' && (
+                    <div>
+                        <Label>Model</Label>
+                        <Select
+                            value={uiModel || OPENAI_MODEL_OPTIONS[0]}
+                            onValueChange={(value) => setUiModel(value)}
+                        >
+                            <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {OPENAI_MODEL_OPTIONS.map((model) => (
+                                    <SelectItem key={model} value={model}>{model}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Audio is sent to the official OpenAI transcription API
+                        </p>
+                    </div>
                 )}
 
                 {requiresApiKey && (
