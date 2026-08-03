@@ -651,9 +651,9 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
 
   if (!hasContent && status === 'completed') {
     return (
-      <div className="w-full p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-        <p className="text-gray-600">No summary content available.</p>
-        <p className="text-gray-500 text-sm mt-1">Try generating a new summary.</p>
+      <div className="w-full p-4 bg-app border border-edge rounded-lg text-center">
+        <p className="text-muted-ink">No summary content available.</p>
+        <p className="text-muted-ink text-sm mt-1">Try generating a new summary.</p>
       </div>
     );
   }
@@ -675,7 +675,7 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
       {/* Context Menu */}
       {contextMenu.visible && selectedBlocks.length > 0 && (
         <div
-          className="fixed z-50 bg-white shadow-lg rounded-lg py-1 min-w-[160px] border border-gray-200
+          className="fixed z-50 bg-surface shadow-lg rounded-lg py-1 min-w-[160px] border border-edge
                      animate-in fade-in zoom-in-95 duration-150"
           style={{ 
             left: contextMenu.x, 
@@ -684,14 +684,14 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
           onClick={e => e.stopPropagation()}
         >
           <button
-            className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center space-x-2"
+            className="w-full px-4 py-2 text-left hover:bg-wash flex items-center space-x-2"
             onClick={handleCopyBlocks}
           >
-            <span className="text-gray-600">📋</span>
+            <span className="text-muted-ink">📋</span>
             <span>Copy {selectedBlocks.length > 1 ? `${selectedBlocks.length} blocks` : 'block'}</span>
           </button>
           <button
-            className="w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600 flex items-center space-x-2"
+            className="w-full px-4 py-2 text-left hover:bg-wash text-red-600 flex items-center space-x-2"
             onClick={handleDeleteBlocks}
           >
             <span>🗑️</span>
@@ -711,7 +711,7 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
           <button
             onClick={handleUndo}
             disabled={currentHistoryIndex === 0}
-            className="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
+            className="p-2 hover:bg-wash rounded disabled:opacity-50"
             title="Undo"
           >
             <svg
@@ -732,7 +732,7 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
           <button
             onClick={handleRedo}
             disabled={currentHistoryIndex === history.length - 1}
-            className="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
+            className="p-2 hover:bg-wash rounded disabled:opacity-50"
             title="Redo"
           >
             <svg
@@ -752,7 +752,7 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
           </button>
           <button
             onClick={handleAddSection}
-            className="p-2 hover:bg-gray-100 rounded"
+            className="p-2 hover:bg-wash rounded"
             title="Add new section"
           >
             <svg
@@ -775,14 +775,14 @@ export const AISummary = ({ summary, status, error, onSummaryChange, onRegenerat
               const markdown = convertToMarkdown();
               navigator.clipboard.writeText(markdown);
             }}
-            className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md flex items-center space-x-1"
+            className="px-2 py-1 text-sm bg-wash hover:bg-active rounded-md flex items-center space-x-1"
           >
             <span>📋</span>
             <span>Copy</span>
           </button>
           <button
             onClick={onRegenerateSummary}
-            className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md flex items-center space-x-1"
+            className="px-2 py-1 text-sm bg-wash hover:bg-active rounded-md flex items-center space-x-1"
             title="Regenerate Summary"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

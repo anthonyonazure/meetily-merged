@@ -139,13 +139,13 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
   const runningCount = runs.filter(run => run.status === 'running').length;
 
   return (
-    <div className="border-t border-gray-200 bg-white flex-shrink-0 flex flex-col max-h-[45%]">
+    <div className="border-t border-edge bg-surface flex-shrink-0 flex flex-col max-h-[45%]">
       {/* Header bar */}
       <button
         onClick={() => setExpanded(previous => !previous)}
-        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors w-full text-left"
+        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-ink hover:bg-wash transition-colors w-full text-left"
       >
-        <Bot className="w-4 h-4 text-gray-500" />
+        <Bot className="w-4 h-4 text-muted-ink" />
         <span>Agents</span>
         {runningCount > 0 && (
           <span className="flex items-center gap-1 text-xs text-blue-600">
@@ -154,11 +154,11 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
           </span>
         )}
         {actionItems.filter(item => item.status === 'open').length > 0 && (
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-faint">
             {actionItems.filter(item => item.status === 'open').length} open action item{actionItems.filter(item => item.status === 'open').length === 1 ? '' : 's'}
           </span>
         )}
-        <span className="ml-auto text-gray-400">
+        <span className="ml-auto text-faint">
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
         </span>
       </button>
@@ -169,30 +169,30 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
             const latestRun = latestRunFor(agent.id);
             const isRunning = latestRun?.status === 'running' || startingAgentId === agent.id;
             return (
-              <div key={agent.id} className="border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+              <div key={agent.id} className="border border-edge rounded-lg">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-edge">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-800">{agent.name}</div>
-                    <div className="text-xs text-gray-500 truncate" title={agent.description}>
+                    <div className="text-sm font-medium text-ink">{agent.name}</div>
+                    <div className="text-xs text-muted-ink truncate" title={agent.description}>
                       {agent.description}
                     </div>
                   </div>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="ghost" size="sm" title={`${agent.name} settings`} aria-label={`${agent.name} settings`}>
-                        <Settings2 className="w-4 h-4 text-gray-500" />
+                        <Settings2 className="w-4 h-4 text-muted-ink" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-64 space-y-3">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-gray-700">Enabled</span>
+                        <span className="text-sm text-muted-ink">Enabled</span>
                         <Switch
                           checked={agent.enabled}
                           onCheckedChange={(value: boolean) => void handleToggle(agent, 'enabled', value)}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-gray-700">Auto-run after summary</span>
+                        <span className="text-sm text-muted-ink">Auto-run after summary</span>
                         <Switch
                           checked={agent.auto_run}
                           disabled={!agent.enabled}
@@ -230,7 +230,7 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
                 {latestRun && latestRun.status === 'completed' && latestRun.output_md && (
                   <div className="px-3 py-2">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-faint">
                         {new Date(latestRun.created_at).toLocaleString()}
                       </span>
                       <Button variant="ghost" size="sm" onClick={() => void handleCopy(latestRun)}>
@@ -253,8 +253,8 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
 
                 {/* Tracked action items live under the Action Tracker card */}
                 {agent.id === 'action_tracker' && actionItems.length > 0 && (
-                  <div className="px-3 py-2 border-t border-gray-100 space-y-1">
-                    <div className="text-xs font-medium text-gray-500 mb-1">Tracked items</div>
+                  <div className="px-3 py-2 border-t border-edge space-y-1">
+                    <div className="text-xs font-medium text-muted-ink mb-1">Tracked items</div>
                     {actionItems.map(item => (
                       <label key={item.id} className="flex items-start gap-2 text-sm cursor-pointer">
                         <input
@@ -263,10 +263,10 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
                           onChange={() => void handleActionToggle(item)}
                           className="mt-1"
                         />
-                        <span className={item.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700'}>
+                        <span className={item.status === 'done' ? 'line-through text-faint' : 'text-muted-ink'}>
                           {item.description}
-                          {item.owner ? <span className="text-gray-400"> · {item.owner}</span> : null}
-                          {item.due_hint ? <span className="text-gray-400"> · {item.due_hint}</span> : null}
+                          {item.owner ? <span className="text-faint"> · {item.owner}</span> : null}
+                          {item.due_hint ? <span className="text-faint"> · {item.due_hint}</span> : null}
                         </span>
                       </label>
                     ))}
@@ -276,7 +276,7 @@ export function AgentsPanel({ meetingId }: AgentsPanelProps) {
             );
           })}
           {agents.length === 0 && (
-            <div className="text-sm text-gray-400 py-2">No agents available.</div>
+            <div className="text-sm text-faint py-2">No agents available.</div>
           )}
         </div>
       )}

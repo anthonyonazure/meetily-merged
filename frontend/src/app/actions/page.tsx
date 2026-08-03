@@ -79,18 +79,18 @@ export default function ActionsPage() {
   }, [items]);
 
   return (
-    <div className="h-screen overflow-y-auto bg-gray-50">
+    <div className="h-screen overflow-y-auto bg-app">
       <div className="max-w-3xl mx-auto p-8">
         <div className="flex items-center gap-3 mb-1">
-          <ListChecks className="w-6 h-6 text-gray-600" />
-          <h1 className="text-2xl font-semibold text-gray-900">Actions</h1>
+          <ListChecks className="w-6 h-6 text-muted-ink" />
+          <h1 className="text-2xl font-semibold text-ink">Actions</h1>
         </div>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-muted-ink mb-6">
           Action items extracted from your meetings by the Action Tracker agent.
           {openCount > 0 ? ` ${openCount} open.` : ''}
         </p>
 
-        <label className="flex items-center gap-2 text-sm text-gray-600 mb-4 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-muted-ink mb-4 cursor-pointer">
           <input
             type="checkbox"
             checked={showDone}
@@ -100,9 +100,9 @@ export default function ActionsPage() {
         </label>
 
         {isLoading ? (
-          <div className="text-sm text-gray-400 py-8 text-center">Loading action items…</div>
+          <div className="text-sm text-faint py-8 text-center">Loading action items…</div>
         ) : groups.length === 0 ? (
-          <div className="text-sm text-gray-400 py-8 text-center border border-dashed border-gray-200 rounded-lg bg-white">
+          <div className="text-sm text-faint py-8 text-center border border-dashed border-edge rounded-lg bg-surface">
             {showDone
               ? 'No action items yet. Run the Action Tracker agent on a meeting, or let it run automatically after a summary.'
               : 'No open action items. Nice work.'}
@@ -110,9 +110,9 @@ export default function ActionsPage() {
         ) : (
           <div className="space-y-6">
             {groups.map(group => (
-              <div key={group.meetingId} className="bg-white border border-gray-200 rounded-lg">
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-                  <span className="text-sm font-medium text-gray-800 truncate">
+              <div key={group.meetingId} className="bg-surface border border-edge rounded-lg">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-edge">
+                  <span className="text-sm font-medium text-ink truncate">
                     {group.meetingTitle}
                   </span>
                   <Button
@@ -134,15 +134,15 @@ export default function ActionsPage() {
                         className="mt-1 cursor-pointer"
                       />
                       <span
-                        className={`flex-1 text-sm ${item.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                        className={`flex-1 text-sm ${item.status === 'done' ? 'line-through text-faint' : 'text-muted-ink'}`}
                       >
                         {item.description}
-                        {item.owner ? <span className="text-gray-400"> · {item.owner}</span> : null}
-                        {item.due_hint ? <span className="text-gray-400"> · {item.due_hint}</span> : null}
+                        {item.owner ? <span className="text-faint"> · {item.owner}</span> : null}
+                        {item.due_hint ? <span className="text-faint"> · {item.due_hint}</span> : null}
                       </span>
                       <button
                         onClick={() => void handleDelete(item)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 mt-0.5"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-faint hover:text-red-500 mt-0.5"
                         title="Delete action item"
                         aria-label="Delete action item"
                       >

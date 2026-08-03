@@ -161,7 +161,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
     };
 
     return (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Transcription Settings</h3>
             </div>
@@ -344,7 +344,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                         <Button
                             className={cn(
                                 'px-4 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
-                                isDoneDisabled || isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                                isDoneDisabled || isSaving ? 'bg-faint cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                             )}
                             onClick={handleSave}
                             disabled={isDoneDisabled || isSaving}

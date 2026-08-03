@@ -35,7 +35,7 @@ function StateIcon({ state }: { state: WidgetState }) {
   if (state === 'error') {
     return <AlertCircle className="w-4 h-4 text-amber-500" />;
   }
-  return <Mic className="w-4 h-4 text-slate-400" />;
+  return <Mic className="w-4 h-4 text-faint" />;
 }
 
 export default function DictationWidgetPage() {
@@ -74,27 +74,27 @@ export default function DictationWidgetPage() {
       data-tauri-drag-region
     >
       <div
-        className="w-[392px] rounded-2xl border border-white/50 bg-white/90 backdrop-blur-xl shadow-[0_12px_38px_rgba(15,23,42,0.2)] px-4 py-3.5"
+        className="w-[392px] rounded-2xl border border-white/50 bg-surface/90 backdrop-blur-xl shadow-[0_12px_38px_rgba(15,23,42,0.2)] px-4 py-3.5"
         style={DRAG_REGION_STYLE}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <StateIcon state={payload.state} />
             <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-slate-900 truncate">{payload.message}</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Hold <span className="font-medium text-slate-700">{payload.hotkey}</span>
+              <p className="text-[13px] font-semibold text-ink truncate">{payload.message}</p>
+              <p className="text-[11px] text-muted-ink mt-0.5">
+                Hold <span className="font-medium text-muted-ink">{payload.hotkey}</span>
               </p>
             </div>
           </div>
 
-          <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 uppercase tracking-wide">
+          <span className="text-[10px] px-2 py-1 rounded-full bg-wash text-muted-ink uppercase tracking-wide">
             Dictation
           </span>
         </div>
 
         {payload.transcript && (
-          <p className="mt-2 text-[12px] leading-5 text-slate-700 bg-slate-50 rounded-lg px-2.5 py-2 min-h-0 line-clamp-2 break-words">
+          <p className="mt-2 text-[12px] leading-5 text-muted-ink bg-app rounded-lg px-2.5 py-2 min-h-0 line-clamp-2 break-words">
             {payload.transcript}
           </p>
         )}

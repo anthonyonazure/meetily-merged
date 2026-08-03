@@ -147,9 +147,9 @@ export function PreferenceSettings() {
   return (
     <div className="space-y-6">
       {/* Appearance Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Appearance</h3>
-        <p className="text-sm text-gray-600 mb-4">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-ink mb-2">Appearance</h3>
+        <p className="text-sm text-muted-ink mb-4">
           Choose the Ledger look: follow your system, or force light or dark.
         </p>
         <div className="flex gap-2">
@@ -161,7 +161,7 @@ export function PreferenceSettings() {
               className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md border transition-colors ${
                 themePreference === value
                   ? 'bg-active border-faint text-ink font-medium'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                  : 'border-edge text-muted-ink hover:bg-wash'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -172,11 +172,11 @@ export function PreferenceSettings() {
       </div>
 
       {/* In-app Recording Reminder Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">In-app recording reminder</h3>
-            <p className="text-sm text-gray-600">
+            <h3 className="text-lg font-semibold text-ink mb-2">In-app recording reminder</h3>
+            <p className="text-sm text-muted-ink">
               Show the compliance reminder toast inside the app when a recording starts.
             </p>
           </div>
@@ -185,11 +185,11 @@ export function PreferenceSettings() {
       </div>
 
       {/* Meeting detection: process-name signal (augments mic-activity detection) */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Detect by running apps</h3>
-            <p className="text-sm text-gray-600">
+            <h3 className="text-lg font-semibold text-ink mb-2">Detect by running apps</h3>
+            <p className="text-sm text-muted-ink">
               Also treat a running meeting app (Zoom, Teams, Webex, Slack, Discord) as a meeting
               signal, in addition to microphone activity. May notify when an app is merely open.
             </p>
@@ -199,22 +199,22 @@ export function PreferenceSettings() {
       </div>
 
       {/* Data Storage Locations Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Storage Locations</h3>
-        <p className="text-sm text-gray-600 mb-6">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-ink mb-4">Data Storage Locations</h3>
+        <p className="text-sm text-muted-ink mb-6">
           View and access where Meetily stores your data
         </p>
 
         <div className="space-y-4">
           {/* Database Location */}
-          {/* <div className="p-4 border rounded-lg bg-gray-50">
+          {/* <div className="p-4 border rounded-lg bg-app">
             <div className="font-medium mb-2">Database</div>
-            <div className="text-sm text-gray-600 mb-3 break-all font-mono text-xs">
+            <div className="text-sm text-muted-ink mb-3 break-all font-mono text-xs">
               {storageLocations?.database || 'Loading...'}
             </div>
             <button
               onClick={() => handleOpenFolder('database')}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               Open Folder
@@ -222,14 +222,14 @@ export function PreferenceSettings() {
           </div> */}
 
           {/* Models Location */}
-          {/* <div className="p-4 border rounded-lg bg-gray-50">
+          {/* <div className="p-4 border rounded-lg bg-app">
             <div className="font-medium mb-2">Whisper Models</div>
-            <div className="text-sm text-gray-600 mb-3 break-all font-mono text-xs">
+            <div className="text-sm text-muted-ink mb-3 break-all font-mono text-xs">
               {storageLocations?.models || 'Loading...'}
             </div>
             <button
               onClick={() => handleOpenFolder('models')}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               Open Folder
@@ -237,14 +237,14 @@ export function PreferenceSettings() {
           </div> */}
 
           {/* Recordings Location */}
-          <div className="p-4 border rounded-lg bg-gray-50">
+          <div className="p-4 border rounded-lg bg-app">
             <div className="font-medium mb-2">Meeting Recordings</div>
-            <div className="text-sm text-gray-600 mb-3 break-all font-mono text-xs">
+            <div className="text-sm text-muted-ink mb-3 break-all font-mono text-xs">
               {storageLocations?.recordings || 'Loading...'}
             </div>
             <button
               onClick={() => handleOpenFolder('recordings')}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               Open Folder
@@ -260,9 +260,9 @@ export function PreferenceSettings() {
       </div>
 
       {/* Export Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Export Meetings</h3>
-        <p className="text-sm text-gray-600 mb-4">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-ink mb-2">Export Meetings</h3>
+        <p className="text-sm text-muted-ink mb-4">
           Save every meeting (summary plus timestamped transcript) to a folder you choose. The database stays the source of truth.
           PDF export writes a print-ready page and opens it so you can save it as a PDF from the print dialog.
         </p>
@@ -271,7 +271,7 @@ export function PreferenceSettings() {
           <button
             onClick={() => handleExport('markdown', 'Markdown')}
             disabled={exportingFormat !== null}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="w-4 h-4" />
             {exportingFormat === 'markdown' ? 'Exporting…' : 'Markdown'}
@@ -279,7 +279,7 @@ export function PreferenceSettings() {
           <button
             onClick={() => handleExport('docx', 'Word (DOCX)')}
             disabled={exportingFormat !== null}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="w-4 h-4" />
             {exportingFormat === 'docx' ? 'Exporting…' : 'Word (DOCX)'}
@@ -287,7 +287,7 @@ export function PreferenceSettings() {
           <button
             onClick={() => handleExport('pdf', 'PDF (print)')}
             disabled={exportingFormat !== null}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="w-4 h-4" />
             {exportingFormat === 'pdf' ? 'Exporting…' : 'PDF (via print)'}

@@ -131,8 +131,8 @@ export function UpcomingEvents() {
   return (
     <div className="mx-3 mt-3">
       <div className="flex items-center p-3 text-lg font-semibold h-10 rounded-lg">
-        <CalendarClock className="w-4 h-4 mr-2 text-gray-600" />
-        <span className="text-gray-700">Upcoming</span>
+        <CalendarClock className="w-4 h-4 mr-2 text-muted-ink" />
+        <span className="text-muted-ink">Upcoming</span>
       </div>
 
       {status === 'not_determined' && (
@@ -145,7 +145,7 @@ export function UpcomingEvents() {
       )}
 
       {status === 'granted' && events.length === 0 && (
-        <div className="mx-3 mb-1 px-2 py-1 text-xs text-gray-400">
+        <div className="mx-3 mb-1 px-2 py-1 text-xs text-faint">
           No meetings in the next 24 hours
         </div>
       )}
@@ -156,12 +156,12 @@ export function UpcomingEvents() {
             key={`${event.id}-${event.start}`}
             onClick={() => handleEventClick(event)}
             title={`Start a meeting named "${event.title}"`}
-            className="group flex items-center gap-2 mx-3 px-2 py-1.5 rounded-md hover:bg-gray-100 cursor-pointer"
+            className="group flex items-center gap-2 mx-3 px-2 py-1.5 rounded-md hover:bg-wash cursor-pointer"
           >
-            <span className="text-xs text-gray-400 w-14 flex-shrink-0">
+            <span className="text-xs text-faint w-14 flex-shrink-0">
               {formatEventTime(event)}
             </span>
-            <span className="text-sm text-gray-700 truncate flex-1">{event.title}</span>
+            <span className="text-sm text-muted-ink truncate flex-1">{event.title}</span>
             {event.meeting_url && (
               <button
                 onClick={mouseEvent => void handleJoin(event, mouseEvent)}

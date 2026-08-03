@@ -22,7 +22,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return (
-        <code key={key} className="px-1 py-0.5 bg-gray-100 rounded text-[0.9em]">
+        <code key={key} className="px-1 py-0.5 bg-wash rounded text-[0.9em]">
           {part.slice(1, -1)}
         </code>
       );
@@ -68,10 +68,10 @@ export function MarkdownLite({ markdown }: { markdown: string }) {
       const level = heading[1].length;
       const content = renderInline(heading[2], key);
       const classes = [
-        'text-lg font-semibold text-gray-900 mt-2',
-        'text-base font-semibold text-gray-900 mt-2',
-        'text-sm font-semibold text-gray-800 mt-1',
-        'text-sm font-medium text-gray-800 mt-1',
+        'text-lg font-semibold text-ink mt-2',
+        'text-base font-semibold text-ink mt-2',
+        'text-sm font-semibold text-ink mt-1',
+        'text-sm font-medium text-ink mt-1',
       ][level - 1];
       blocks.push(<div key={key} className={classes}>{content}</div>);
       return;
@@ -107,5 +107,5 @@ export function MarkdownLite({ markdown }: { markdown: string }) {
 
   flushList('md-tail');
 
-  return <div className="space-y-2 text-sm text-gray-700 leading-relaxed">{blocks}</div>;
+  return <div className="space-y-2 text-sm text-muted-ink leading-relaxed">{blocks}</div>;
 }

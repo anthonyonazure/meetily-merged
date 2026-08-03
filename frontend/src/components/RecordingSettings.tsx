@@ -486,8 +486,8 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
   if (loading) {
     return (
       <div className="animate-pulse">
-        <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
-        <div className="h-8 bg-gray-200 rounded mb-4"></div>
+        <div className="h-4 bg-active rounded w-1/4 mb-4"></div>
+        <div className="h-8 bg-active rounded mb-4"></div>
       </div>
     );
   }
@@ -502,7 +502,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Recording Settings</h3>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-muted-ink mb-6">
           Configure how your audio recordings are saved during meetings.
         </p>
       </div>
@@ -511,7 +511,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1">
           <div className="font-medium">Save Audio Recordings</div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-muted-ink">
             Automatically save audio files when recording stops
           </div>
         </div>
@@ -525,14 +525,14 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       {/* Folder Location - Only shown when auto_save is enabled */}
       {preferences.auto_save && (
         <div className="space-y-4">
-          <div className="p-4 border rounded-lg bg-gray-50">
+          <div className="p-4 border rounded-lg bg-app">
             <div className="font-medium mb-2">Save Location</div>
-            <div className="text-sm text-gray-600 mb-3 break-all">
+            <div className="text-sm text-muted-ink mb-3 break-all">
               {preferences.save_folder || 'Default folder'}
             </div>
             <button
               onClick={handleOpenFolder}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-edge rounded-md hover:bg-wash transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               Open Folder
@@ -563,7 +563,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1">
           <div className="font-medium">Recording Start Notification</div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-muted-ink">
             Show reminder to inform participants when recording starts
           </div>
         </div>
@@ -578,11 +578,11 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       <div className="p-4 border rounded-lg space-y-3">
         <div className="flex items-start gap-3">
           <div className="mt-0.5">
-            <Keyboard className="w-4 h-4 text-gray-600" />
+            <Keyboard className="w-4 h-4 text-muted-ink" />
           </div>
           <div className="flex-1">
             <div className="font-medium">Push-to-talk Dictation Hotkey</div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-ink">
               Hold this hotkey to dictate into any app&apos;s text input. Example formats:
               <span className="font-medium"> fn+space</span>,
               <span className="font-medium"> ctrl+space</span>,
@@ -598,7 +598,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
             className={`rounded-md border px-3 py-2 text-sm transition-colors outline-none ${
               isCapturingDictationHotkey
                 ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                : 'border-gray-300 bg-gray-50'
+                : 'border-edge bg-app'
             }`}
           >
             {isCapturingDictationHotkey
@@ -606,7 +606,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
               : `Current hotkey: ${dictationHotkey}`}
           </div>
           {captureHint && (
-            <p className="text-xs text-gray-600">{captureHint}</p>
+            <p className="text-xs text-muted-ink">{captureHint}</p>
           )}
         </div>
 
@@ -679,12 +679,12 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       {/* Device Preferences */}
       <div className="space-y-4">
         <div className="border-t pt-6">
-          <h4 className="text-base font-medium text-gray-900 mb-4">Default Audio Devices</h4>
-          <p className="text-sm text-gray-600 mb-4">
+          <h4 className="text-base font-medium text-ink mb-4">Default Audio Devices</h4>
+          <p className="text-sm text-muted-ink mb-4">
             Set your preferred microphone and system audio devices for recording. These will be automatically selected when starting new recordings.
           </p>
 
-          <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="border rounded-lg p-4 bg-app">
             <DeviceSelection
               selectedDevices={{
                 micDevice: preferences.preferred_mic_device,
@@ -699,11 +699,11 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
 
       {/* Pause length. This is what decides when audio is sent to the model at all,
           so it sets how quickly text appears — not just where a line breaks. */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+      <div className="bg-surface rounded-lg border border-edge p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-ink mb-2">
           Pause before transcribing
         </h3>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-muted-ink mb-4">
           How long a silence must last before the line ends and the audio is transcribed. It sets both where lines break and how quickly text appears. Applies to the next recording.
         </p>
 
@@ -717,14 +717,14 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
             onChange={(e) => handleVadRedemptionInput(Number(e.target.value))}
             onPointerUp={handleVadRedemptionCommit}
             onKeyUp={handleVadRedemptionCommit}
-            className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600"
+            className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-active accent-blue-600"
           />
-          <span className="w-20 shrink-0 text-right text-sm font-medium tabular-nums text-gray-900">
+          <span className="w-20 shrink-0 text-right text-sm font-medium tabular-nums text-ink">
             {preferences.vad_redemption_ms} ms
           </span>
         </div>
 
-        <div className="mt-2 flex justify-between text-xs text-gray-400">
+        <div className="mt-2 flex justify-between text-xs text-faint">
           <span>100 ms — faster, more splits</span>
           <span>400 ms — slower, fewer splits</span>
         </div>

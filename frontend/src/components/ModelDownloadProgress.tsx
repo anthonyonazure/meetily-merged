@@ -111,12 +111,12 @@ export function DownloadSummary({ totalModels, downloadedModels, totalSizeMb }: 
   };
 
   return (
-    <div className="bg-gray-50 rounded-lg p-3 text-sm">
+    <div className="bg-app rounded-lg p-3 text-sm">
       <div className="flex items-center justify-between">
-        <span className="text-gray-700">
+        <span className="text-muted-ink">
           📦 {downloadedModels} of {totalModels} models available
         </span>
-        <span className="text-gray-600">
+        <span className="text-muted-ink">
           💾 {formatSize(totalSizeMb)} total
         </span>
       </div>

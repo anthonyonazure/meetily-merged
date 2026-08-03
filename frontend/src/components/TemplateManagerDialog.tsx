@@ -204,7 +204,7 @@ export function TemplateManagerDialog({
               {templates.map((template) => (
                 <div
                   key={template.id}
-                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50"
+                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-wash"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -213,7 +213,7 @@ export function TemplateManagerDialog({
                         <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded flex-shrink-0">Custom</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{template.description}</p>
+                    <p className="text-xs text-muted-ink truncate">{template.description}</p>
                   </div>
                   <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                     <Button
@@ -343,9 +343,9 @@ export function TemplateManagerDialog({
                   </div>
 
                   {editSections.map((section, index) => (
-                    <div key={index} className="border rounded-lg p-3 space-y-3 bg-gray-50/50">
+                    <div key={index} className="border rounded-lg p-3 space-y-3 bg-app/50">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-500">Section {index + 1}</span>
+                        <span className="text-xs font-medium text-muted-ink">Section {index + 1}</span>
                         {!isReadOnly && editSections.length > 1 && (
                           <Button
                             variant="ghost"

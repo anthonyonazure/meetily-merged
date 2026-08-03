@@ -376,10 +376,10 @@ export default function RootLayout({
 
                               {/* Show loading, onboarding, or main app */}
                               {!onboardingCheckDone ? (
-                                <div className="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
+                                <div className="fixed inset-0 bg-app flex items-center justify-center z-50">
                                   <div className="text-center space-y-3">
-                                    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin mx-auto" />
-                                    <p className="text-sm text-gray-500">Loading...</p>
+                                    <div className="w-8 h-8 border-2 border-edge border-t-gray-700 rounded-full animate-spin mx-auto" />
+                                    <p className="text-sm text-muted-ink">Loading...</p>
                                   </div>
                                 </div>
                               ) : showOnboarding ? (

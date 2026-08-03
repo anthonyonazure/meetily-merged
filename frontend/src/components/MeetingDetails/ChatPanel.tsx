@@ -136,13 +136,13 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
   }, [scopeMeetingId]);
 
   return (
-    <div className="border-t border-gray-200 bg-white flex-shrink-0 flex flex-col max-h-[45%]">
+    <div className="border-t border-edge bg-surface flex-shrink-0 flex flex-col max-h-[45%]">
       {/* Header bar */}
       <button
         onClick={() => setExpanded(previous => !previous)}
-        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors w-full text-left"
+        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-ink hover:bg-wash transition-colors w-full text-left"
       >
-        <MessageSquare className="w-4 h-4 text-gray-500" />
+        <MessageSquare className="w-4 h-4 text-muted-ink" />
         <span>Chat</span>
         {waiting && (
           <span className="flex items-center gap-1 text-xs text-blue-600">
@@ -150,7 +150,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
             Thinking
           </span>
         )}
-        <span className="ml-auto text-gray-400">
+        <span className="ml-auto text-faint">
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
         </span>
       </button>
@@ -159,16 +159,16 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
         <div className="flex flex-col min-h-0">
           {/* Scope switch and clear */}
           <div className="flex items-center gap-2 px-4 pb-2">
-            <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+            <div className="flex rounded-md border border-edge overflow-hidden text-xs">
               <button
                 onClick={() => setScope('meeting')}
-                className={`px-2.5 py-1 ${scope === 'meeting' ? 'bg-gray-100 text-gray-800 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+                className={`px-2.5 py-1 ${scope === 'meeting' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
               >
                 This meeting
               </button>
               <button
                 onClick={() => setScope('all')}
-                className={`px-2.5 py-1 border-l border-gray-200 ${scope === 'all' ? 'bg-gray-100 text-gray-800 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+                className={`px-2.5 py-1 border-l border-edge ${scope === 'all' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
               >
                 All meetings
               </button>
@@ -177,7 +177,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="ml-auto text-gray-400"
+                className="ml-auto text-faint"
                 title="Clear chat history"
                 aria-label="Clear chat history"
                 onClick={() => void handleClear()}
@@ -190,7 +190,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
           {/* Message list */}
           <div ref={listRef} className="overflow-y-auto px-4 space-y-3 min-h-[80px] max-h-[240px]">
             {messages.length === 0 && !waiting && (
-              <div className="text-sm text-gray-400 py-2">
+              <div className="text-sm text-faint py-2">
                 {scope === 'meeting'
                   ? 'Ask a question about this meeting. Answers come only from its transcript and summary.'
                   : 'Ask a question across your recent meetings. Answers come from their titles and summaries.'}
@@ -201,8 +201,8 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
                 <div
                   className={
                     message.role === 'user'
-                      ? 'inline-block max-w-[85%] rounded-lg bg-blue-50 px-3 py-2 text-sm text-gray-800 text-left'
-                      : 'inline-block max-w-[85%] rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-800 text-left'
+                      ? 'inline-block max-w-[85%] rounded-lg bg-blue-50 px-3 py-2 text-sm text-ink text-left'
+                      : 'inline-block max-w-[85%] rounded-lg bg-app px-3 py-2 text-sm text-ink text-left'
                   }
                 >
                   {message.role === 'assistant' ? (
@@ -214,7 +214,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
               </div>
             ))}
             {waiting && (
-              <div className="flex items-center gap-2 text-xs text-gray-400 pb-1">
+              <div className="flex items-center gap-2 text-xs text-faint pb-1">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Waiting for the model…
               </div>
@@ -234,7 +234,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
               }}
               rows={1}
               placeholder={scope === 'meeting' ? 'Ask about this meeting…' : 'Ask across your meetings…'}
-              className="flex-1 resize-none rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-300"
+              className="flex-1 resize-none rounded-md border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-300"
             />
             <Button
               variant="outline"

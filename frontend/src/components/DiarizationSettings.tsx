@@ -117,10 +117,10 @@ export function DiarizationSettings() {
     const modelsReady = modelInfo?.ready ?? false;
 
     return (
-        <div className="border-t border-gray-200 pt-4 mt-4">
+        <div className="border-t border-edge pt-4 mt-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-gray-500" />
+                    <Users className="h-4 w-4 text-muted-ink" />
                     <div>
                         <Label>Speaker Identification</Label>
                         <p className="text-xs text-muted-foreground">
@@ -141,7 +141,7 @@ export function DiarizationSettings() {
                         </p>
                     ) : isDownloading ? (
                         <div className="space-y-1">
-                            <p className="text-xs text-gray-500">{downloadLabel}</p>
+                            <p className="text-xs text-muted-ink">{downloadLabel}</p>
                             <Progress value={downloadProgress} className="h-2" />
                         </div>
                     ) : (
