@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Mic, Sparkles, Check, Loader2, Download } from 'lucide-react';
@@ -244,7 +244,7 @@ export function DownloadProgressStep() {
       unlistenComplete.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, []);
+  }, [setParakeetDownloaded]);
 
   // Listen to Summary Model download progress (always downloading for builtin-ai)
   useEffect(() => {
@@ -282,7 +282,7 @@ export function DownloadProgressStep() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [selectedSummaryModel]);
+  }, [selectedSummaryModel, setSummaryModelDownloaded]);
 
   useEffect(() => {
     const modelForSize = selectedSummaryModel || recommendedSummaryModel;
@@ -304,7 +304,7 @@ export function DownloadProgressStep() {
     }));
   }, [selectedSummaryModel, recommendedSummaryModel, summaryModelDownloaded]);
 
-  const startSummaryDownload = async () => {
+  const startSummaryDownload = useCallback(async () => {
     if (!summaryModelDownloaded && selectedSummaryModel) {
       try {
         setSummaryState((prev) => ({
@@ -322,7 +322,8 @@ export function DownloadProgressStep() {
         setSummaryState((prev) => ({ ...prev, status: 'error', error: String(error) }));
       }
     }
-  };
+  }, [selectedSummaryModel, startBackgroundDownloads, summaryModelDownloaded]);
+
 
   const handleContinue = async () => {
     // Verify actual model availability (catches state drift)

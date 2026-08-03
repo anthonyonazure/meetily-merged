@@ -106,6 +106,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [permissionsSkipped, setPermissionsSkipped] = useState(false);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const initializationActionsRef = useRef<{
+    loadStatus: () => Promise<void>;
+    checkDatabase: () => Promise<void>;
+    initializeDatabase: () => Promise<void>;
+  }>({
+    loadStatus: async () => {},
+    checkDatabase: async () => {},
+    initializeDatabase: async () => {},
+  });
+  const saveOnboardingStatusRef = useRef<() => Promise<void>>(async () => undefined);
 
   const initializeSummaryModelSelection = async (preferredModel = selectedSummaryModel) => {
     try {
@@ -148,9 +158,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   // Load status on mount and initialize database
   useEffect(() => {
-    loadOnboardingStatus();
-    checkDatabaseStatus();
-    initializeDatabaseInBackground();
+    const actions = initializationActionsRef.current;
+    void actions.loadStatus();
+    void actions.checkDatabase();
+    void actions.initializeDatabase();
   }, []);
 
   // Initialize database silently in background (moved from SetupOverviewStep)
@@ -224,7 +235,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     if (completed || isCompletingRef.current) return;
 
     saveTimeoutRef.current = setTimeout(() => {
-      saveOnboardingStatus();
+      void saveOnboardingStatusRef.current();
     }, 1000);
 
     return () => {
@@ -573,6 +584,13 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       throw error;
     }
   };
+
+  initializationActionsRef.current = {
+    loadStatus: loadOnboardingStatus,
+    checkDatabase: checkDatabaseStatus,
+    initializeDatabase: initializeDatabaseInBackground,
+  };
+  saveOnboardingStatusRef.current = saveOnboardingStatus;
 
   const setPermissionStatus = useCallback((permission: keyof OnboardingPermissions, status: PermissionStatus) => {
     setPermissions((prev: OnboardingPermissions) => ({

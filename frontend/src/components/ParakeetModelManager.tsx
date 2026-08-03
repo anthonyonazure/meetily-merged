@@ -234,7 +234,7 @@ export function ParakeetModelManager({
     }
   };
 
-  const downloadModel = async (modelName: string) => {
+  const downloadModel = useCallback(async (modelName: string) => {
     if (downloadingModels.has(modelName)) return;
 
     const displayInfo = getModelDisplayInfo(modelName);
@@ -271,7 +271,7 @@ export function ParakeetModelManager({
         )
       );
     }
-  };
+  }, [downloadingModels]);
 
   const selectModel = async (modelName: string) => {
     if (onModelSelect) {

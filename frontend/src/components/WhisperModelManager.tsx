@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,6 +38,7 @@ export function ModelManager({
   // Refs for stable callbacks
   const onModelSelectRef = useRef(onModelSelect);
   const autoSaveRef = useRef(autoSave);
+  const downloadModelRef = useRef<(modelName: string) => Promise<void>>(async () => undefined);
 
   // Progress throttle map to prevent rapid updates
   const progressThrottleRef = useRef<Map<string, { progress: number; timestamp: number }>>(new Map());
@@ -59,13 +60,13 @@ export function ModelManager({
   };
 
   // Persist downloading state to localStorage
-  const updateDownloadingModels = (updater: (prev: Set<string>) => Set<string>) => {
+  const updateDownloadingModels = useCallback((updater: (prev: Set<string>) => Set<string>) => {
     setDownloadingModels(prev => {
       const newSet = updater(prev);
       localStorage.setItem('downloading-models', JSON.stringify(Array.from(newSet)));
       return newSet;
     });
-  };
+  }, []);
 
   // Initialize models
   useEffect(() => {
@@ -115,7 +116,7 @@ export function ModelManager({
     };
 
     initializeModels();
-  }, [initialized, selectedModel, onModelSelect]);
+  }, [initialized, updateDownloadingModels]);
 
   // Set up event listeners for download progress
   useEffect(() => {
@@ -159,7 +160,6 @@ export function ModelManager({
         'model-download-complete',
         (event) => {
           const { modelName } = event.payload;
-          const model = models.find(m => m.name === modelName);
           const displayName = getDisplayName(modelName);
 
           setModels(prevModels =>
@@ -179,7 +179,7 @@ export function ModelManager({
           // Clean up throttle data
           progressThrottleRef.current.delete(modelName);
 
-          toast.success(`${getModelIcon(model?.accuracy || 'Good')} ${displayName} ready!`, {
+          toast.success(`${displayName} ready!`, {
             description: 'Model downloaded and ready to use',
             duration: 4000
           });
@@ -223,7 +223,7 @@ export function ModelManager({
             duration: 6000,
             action: {
               label: 'Retry',
-              onClick: () => downloadModel(modelName)
+              onClick: () => void downloadModelRef.current(modelName)
             }
           });
         }
@@ -286,7 +286,7 @@ export function ModelManager({
     }
   };
 
-  const downloadModel = async (modelName: string) => {
+  const downloadModel = useCallback(async (modelName: string) => {
     if (downloadingModels.has(modelName)) return;
 
     const displayName = getDisplayName(modelName);
@@ -321,7 +321,11 @@ export function ModelManager({
         )
       );
     }
-  };
+  }, [downloadingModels, updateDownloadingModels]);
+
+  useEffect(() => {
+    downloadModelRef.current = downloadModel;
+  }, [downloadModel]);
 
   const selectModel = async (modelName: string) => {
     setHasUserSelection(true);
