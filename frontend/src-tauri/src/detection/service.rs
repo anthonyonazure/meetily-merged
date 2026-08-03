@@ -36,6 +36,11 @@ pub struct DetectionService {
     /// even if the poll loop is mid-`advance()`. The poll loop
     /// snapshots this into `DetectorState` before each tick.
     is_recording: Arc<AtomicBool>,
+    /// Opt-in second signal: also treat running meeting-app processes as
+    /// candidates (ported from MaxwellJryao's meeting_detector). Weaker
+    /// than the mic signal, so it defaults off and is toggled from
+    /// Preference Settings ("Detect by running apps").
+    process_scan_enabled: Arc<AtomicBool>,
 }
 
 impl DetectionService {
@@ -44,7 +49,19 @@ impl DetectionService {
             state: Arc::new(Mutex::new(DetectorState::new(config))),
             running,
             is_recording: Arc::new(AtomicBool::new(false)),
+            process_scan_enabled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Enable/disable the process-name signal source.
+    pub fn set_process_scan_enabled(&self, enabled: bool) {
+        self.process_scan_enabled.store(enabled, Ordering::Release);
+        info!("DetectionService: process-name signal {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Whether the process-name signal source is active.
+    pub fn process_scan_enabled(&self) -> bool {
+        self.process_scan_enabled.load(Ordering::Acquire)
     }
 
     /// Signals the task loop to exit at its next tick. Used on app
@@ -91,6 +108,8 @@ where
     let state = service.state.clone();
     let running_for_task = running.clone();
     let is_recording_for_task = service.is_recording.clone();
+    let process_scan_for_task = service.process_scan_enabled.clone();
+    let process_sampler = crate::detection::signals::process_names::ProcessNameSampler::new();
 
     let sampler = match mic_activity::create() {
         Ok(s) => s,
@@ -113,13 +132,30 @@ where
         while running_for_task.load(Ordering::Acquire) {
             ticker.tick().await;
 
-            let snapshot = match sampler.snapshot() {
+            let mut snapshot = match sampler.snapshot() {
                 Ok(s) => s,
                 Err(e) => {
                     warn!("Meeting detection: snapshot failed: {}", e);
                     continue;
                 }
             };
+
+            // Union in the opt-in process-name signal. Same bundle-ID
+            // vocabulary, so the state machine treats both sources alike.
+            if process_scan_for_task.load(Ordering::Acquire) {
+                match process_sampler.snapshot() {
+                    Ok(proc_snapshot) => {
+                        for bundle in proc_snapshot.active_bundles {
+                            if !snapshot.contains(&bundle) {
+                                snapshot.active_bundles.push(bundle);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Meeting detection: process scan failed: {}", e);
+                    }
+                }
+            }
 
             // Sync the externally-pushed recording flag into the state
             // machine right before advancing. Done under the state lock

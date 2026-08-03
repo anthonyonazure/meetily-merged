@@ -28,6 +28,26 @@ pub async fn get_detection_state(
     Ok(service.current_phase().await)
 }
 
+/// Enable/disable the opt-in process-name signal ("Detect by running apps").
+/// Persistence lives in the frontend preference store; this only flips the
+/// live flag, and the frontend re-syncs it at startup.
+#[tauri::command]
+pub async fn set_process_detection_enabled(
+    enabled: bool,
+    service: State<'_, DetectionService>,
+) -> Result<(), String> {
+    service.set_process_scan_enabled(enabled);
+    Ok(())
+}
+
+/// Whether the process-name signal is currently active.
+#[tauri::command]
+pub async fn get_process_detection_enabled(
+    service: State<'_, DetectionService>,
+) -> Result<bool, String> {
+    Ok(service.process_scan_enabled())
+}
+
 // Keep Wry in scope so the generated handler types match the rest of
 // the app's invoke_handler registrations.
 #[allow(dead_code)]

@@ -833,6 +833,8 @@ pub fn run() {
             notifications::commands::debug_show_notification,
             detection::commands::dismiss_detected_meeting,
             detection::commands::get_detection_state,
+            detection::commands::set_process_detection_enabled,
+            detection::commands::get_process_detection_enabled,
             // System audio capture commands
             audio::system_audio_commands::start_system_audio_capture_command,
             audio::system_audio_commands::list_system_audio_devices_command,

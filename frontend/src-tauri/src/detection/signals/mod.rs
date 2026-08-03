@@ -6,6 +6,7 @@ use anyhow::Result;
 use crate::detection::types::MicSnapshot;
 
 pub mod mic_activity;
+pub mod process_names;
 
 /// A source of `MicSnapshot` samples. Implementations are polled by the
 /// detection service on a fixed cadence.

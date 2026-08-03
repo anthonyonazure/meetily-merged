@@ -15,6 +15,7 @@ export function PreferenceSettings() {
   } = useConfig();
 
   const [showRecordingReminder, setShowRecordingReminder] = useState<boolean | null>(null);
+  const [detectByRunningApps, setDetectByRunningApps] = useState<boolean>(false);
   const [exporting, setExporting] = useState(false);
 
   const handleExportMarkdown = async () => {
@@ -59,6 +60,38 @@ export function PreferenceSettings() {
       }
     })();
   }, []);
+
+  // Load the "detect by running apps" preference and push it to the live
+  // detection service (the backend flag is not persisted across restarts).
+  useEffect(() => {
+    (async () => {
+      try {
+        const { Store } = await import('@tauri-apps/plugin-store');
+        const store = await Store.load('preferences.json');
+        const enabled = (await store.get<boolean>('detect_by_running_apps')) ?? false;
+        setDetectByRunningApps(enabled);
+        await invoke('set_process_detection_enabled', { enabled });
+      } catch (error) {
+        console.error('Failed to load process-detection preference:', error);
+      }
+    })();
+  }, []);
+
+  const handleDetectByRunningAppsToggle = async (enabled: boolean) => {
+    const previous = detectByRunningApps;
+    setDetectByRunningApps(enabled);
+    try {
+      await invoke('set_process_detection_enabled', { enabled });
+      const { Store } = await import('@tauri-apps/plugin-store');
+      const store = await Store.load('preferences.json');
+      await store.set('detect_by_running_apps', enabled);
+      await store.save();
+    } catch (error) {
+      setDetectByRunningApps(previous);
+      console.error('Failed to save process-detection preference:', error);
+      toast.error('Failed to save preference');
+    }
+  };
 
   const handleReminderToggle = async (enabled: boolean) => {
     const previous = showRecordingReminder;
@@ -113,6 +146,20 @@ export function PreferenceSettings() {
             </p>
           </div>
           <Switch checked={reminderEnabled} onCheckedChange={handleReminderToggle} />
+        </div>
+      </div>
+
+      {/* Meeting detection: process-name signal (augments mic-activity detection) */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Detect by running apps</h3>
+            <p className="text-sm text-gray-600">
+              Also treat a running meeting app (Zoom, Teams, Webex, Slack, Discord) as a meeting
+              signal, in addition to microphone activity. May notify when an app is merely open.
+            </p>
+          </div>
+          <Switch checked={detectByRunningApps} onCheckedChange={handleDetectByRunningAppsToggle} />
         </div>
       </div>
 
