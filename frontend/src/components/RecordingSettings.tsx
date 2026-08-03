@@ -12,7 +12,19 @@ export interface RecordingPreferences {
   file_format: string;
   preferred_mic_device: string | null;
   preferred_system_device: string | null;
+  /**
+   * How long a silence must last before the transcript breaks to a new line, in ms.
+   *
+   * This is what decides sentence granularity. It was fixed at 400ms — longer than the
+   * pause between sentences in fluent or professional speech, so several sentences
+   * merged onto one line.
+   */
+  vad_redemption_ms: number;
 }
+
+export const VAD_REDEMPTION_MIN_MS = 100;
+export const VAD_REDEMPTION_MAX_MS = 400;
+export const VAD_REDEMPTION_DEFAULT_MS = 200;
 
 interface RecordingSettingsProps {
   onSave?: (preferences: RecordingPreferences) => void;
@@ -24,7 +36,8 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     auto_save: false,
     file_format: 'mp4',
     preferred_mic_device: null,
-    preferred_system_device: null
+    preferred_system_device: null,
+    vad_redemption_ms: VAD_REDEMPTION_DEFAULT_MS
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,6 +83,13 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
 
   const handleAutoSaveToggle = async (enabled: boolean) => {
     const newPreferences = { ...preferences, auto_save: enabled };
+    setPreferences(newPreferences);
+    await savePreferences(newPreferences);
+  };
+
+  const handleVadRedemptionChange = async (ms: number) => {
+    const clamped = Math.min(VAD_REDEMPTION_MAX_MS, Math.max(VAD_REDEMPTION_MIN_MS, ms));
+    const newPreferences = { ...preferences, vad_redemption_ms: clamped };
     setPreferences(newPreferences);
     await savePreferences(newPreferences);
   };
@@ -232,6 +252,37 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
               disabled={saving}
             />
           </div>
+        </div>
+      </div>
+
+      {/* Sentence segmentation */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Transcript line breaks
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          How long a pause has to last before the transcript starts a new line. Shorter values split closer to sentence boundaries; longer values merge hesitant speech into one line. Applies to the next recording.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <input
+            type="range"
+            min={VAD_REDEMPTION_MIN_MS}
+            max={VAD_REDEMPTION_MAX_MS}
+            step={10}
+            value={preferences.vad_redemption_ms}
+            disabled={saving}
+            onChange={(e) => handleVadRedemptionChange(Number(e.target.value))}
+            className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600 disabled:cursor-not-allowed"
+          />
+          <span className="w-20 shrink-0 text-right text-sm font-medium tabular-nums text-gray-900">
+            {preferences.vad_redemption_ms} ms
+          </span>
+        </div>
+
+        <div className="mt-2 flex justify-between text-xs text-gray-400">
+          <span>More line breaks</span>
+          <span>Fewer line breaks</span>
         </div>
       </div>
     </div>

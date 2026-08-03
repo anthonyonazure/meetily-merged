@@ -28,6 +28,29 @@ pub struct ContinuousVadProcessor {
     last_logged_state: bool,
 }
 
+/// How long a silence must last before speech is considered finished, in ms.
+///
+/// This single number decides transcript granularity. It was hardcoded at 400ms —
+/// longer than the pause between sentences in fluent or professional speech, so
+/// several sentences merged into one line (real recordings produced segments up to
+/// 39 seconds). The default is now 200ms, and the user can tune it in Settings.
+static VAD_REDEMPTION_MS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(200);
+
+pub const VAD_REDEMPTION_MIN_MS: u32 = 100;
+pub const VAD_REDEMPTION_MAX_MS: u32 = 400;
+
+/// Set the pause length used by subsequent recordings. Clamped: below ~100ms the VAD
+/// fragments mid-word, above ~400ms it merges sentences.
+pub fn set_vad_redemption_ms(ms: u32) {
+    let clamped = ms.clamp(VAD_REDEMPTION_MIN_MS, VAD_REDEMPTION_MAX_MS);
+    VAD_REDEMPTION_MS.store(clamped, std::sync::atomic::Ordering::Relaxed);
+    log::info!("VAD redemption time set to {}ms", clamped);
+}
+
+pub fn vad_redemption_ms() -> u32 {
+    VAD_REDEMPTION_MS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl ContinuousVadProcessor {
     pub fn new(input_sample_rate: u32, redemption_time_ms: u32) -> Result<Self> {
         // Silero VAD MUST use 16kHz - this is hardcoded requirement

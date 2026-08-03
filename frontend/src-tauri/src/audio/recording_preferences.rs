@@ -23,6 +23,31 @@ pub struct RecordingPreferences {
     #[cfg(target_os = "macos")]
     #[serde(default)]
     pub system_audio_backend: Option<String>,
+
+    /// How long a silence must last before the transcript is broken into a new line,
+    /// in milliseconds (Silero VAD's "redemption time").
+    ///
+    /// This is the single knob that decides sentence granularity. It was hardcoded to
+    /// 400ms, which is longer than the pause between sentences in fluent or
+    /// professional speech — so several sentences merged into one line (segments of up
+    /// to 39 seconds were observed in real recordings). 200ms splits closer to actual
+    /// sentence boundaries; raise it if hesitations are fragmenting your sentences.
+    #[serde(default = "default_vad_redemption_ms")]
+    pub vad_redemption_ms: u32,
+}
+
+/// Clamped to a range where the value still means something: below ~100ms the VAD
+/// fragments mid-word, above ~400ms it merges sentences.
+pub const VAD_REDEMPTION_MIN_MS: u32 = 100;
+pub const VAD_REDEMPTION_MAX_MS: u32 = 400;
+
+fn default_vad_redemption_ms() -> u32 {
+    200
+}
+
+/// Clamp a stored value into the supported range.
+pub fn clamp_vad_redemption_ms(value: u32) -> u32 {
+    value.clamp(VAD_REDEMPTION_MIN_MS, VAD_REDEMPTION_MAX_MS)
 }
 
 impl Default for RecordingPreferences {
@@ -38,6 +63,7 @@ impl Default for RecordingPreferences {
             preferred_system_device: None,
             #[cfg(target_os = "macos")]
             system_audio_backend: Some("coreaudio".to_string()),
+            vad_redemption_ms: default_vad_redemption_ms(),
         }
     }
 }
@@ -134,6 +160,9 @@ pub async fn load_recording_preferences<R: Runtime>(
     info!("Loaded recording preferences: save_folder={:?}, auto_save={}, format={}, mic={:?}, system={:?}",
           prefs.save_folder, prefs.auto_save, prefs.file_format,
           prefs.preferred_mic_device, prefs.preferred_system_device);
+    // Seed the live VAD knob from whatever was persisted.
+    crate::audio::vad::set_vad_redemption_ms(prefs.vad_redemption_ms);
+
     Ok(prefs)
 }
 
@@ -195,6 +224,10 @@ pub async fn set_recording_preferences<R: Runtime>(
     app: AppHandle<R>,
     preferences: RecordingPreferences,
 ) -> Result<(), String> {
+    // Apply the pause length to the live VAD immediately, so the next recording picks
+    // it up without an app restart.
+    crate::audio::vad::set_vad_redemption_ms(preferences.vad_redemption_ms);
+
     save_recording_preferences(&app, &preferences)
         .await
         .map_err(|e| format!("Failed to save recording preferences: {}", e))

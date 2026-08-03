@@ -731,7 +731,9 @@ impl AudioPipeline {
         // This bridges natural pauses without excessive fragmentation
         // For mac os core audio, 900ms, for windows 400ms seems good
 
-        let redemption_time = if cfg!(target_os = "macos") { 400 } else { 400 };
+        // User-tunable (Settings > Recording). 400ms merged whole paragraphs into one
+        // line; the default is now 200ms.
+        let redemption_time = super::vad::vad_redemption_ms();
 
         let mic_vad_processor = match ContinuousVadProcessor::new(sample_rate, redemption_time) {
             Ok(processor) => {
