@@ -148,6 +148,9 @@ sqlx = { version = "0.8", features = [ "runtime-tokio", "sqlite", "chrono"] }
 tauri = { version = "2.6.2", features = [ "macos-private-api", "protocol-asset", "tray-icon"] }
 tauri-plugin-fs = "2.4.0"
 tauri-plugin-dialog = "2.3.0"
+# platform() is called from the frontend (onboarding, permission flows); without this
+# the IPC call has no handler and can hang rather than reject.
+tauri-plugin-os = "2"
 tauri-plugin-store = "2.4.0"
 tauri-plugin-notification = "2.3.1"
 tauri-plugin-updater = "=2.3.0"

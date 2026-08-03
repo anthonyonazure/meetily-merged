@@ -471,6 +471,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(whisper_engine::parallel_commands::ParallelProcessorState::new())
@@ -481,6 +482,14 @@ pub fn run() {
         .manage(summary::summary_engine::ModelManagerState(Arc::new(tokio::sync::Mutex::new(None))))
         .setup(|_app| {
             log::info!("Application setup complete");
+
+            // Open devtools in debug builds. A frontend exception blanks the window
+            // with no trace anywhere in the Rust log, which makes such bugs needlessly
+            // hard to see; the console is where they actually surface.
+            #[cfg(debug_assertions)]
+            if let Some(window) = _app.get_webview_window("main") {
+                window.open_devtools();
+            }
 
             // Initialize system tray
             if let Err(e) = tray::create_tray(_app.handle()) {
