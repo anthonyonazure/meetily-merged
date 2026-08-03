@@ -171,7 +171,7 @@ PRIORITIZE: proposals ("I think we should..."), dates/deadlines/numbers, disagre
 - Do not start sentences with "The team discussed..." — vary sentence structure.
 - Do not use filler phrases: "It is worth noting", "In summary", "Overall", "In conclusion".
 - The transcript may contain generic speaker labels like [You] (the local user's microphone), [Others] (remote participants), or diarized labels like [Speaker 1], [Speaker 2] (distinct remote voices identified automatically). Do NOT use any of these labels as names. Instead, try to infer actual names from the conversation context (e.g., if someone says "Thanks, Sarah" or "John, can you handle that?"); a consistent [Speaker N] label marks one voice, so a name inferred for it applies to all of that speaker's lines. If no real names can be determined, simply describe what was said without attribution rather than writing "Unnamed participant" or similar placeholders.
-- Correct obvious transcription errors (homophones, technical terms) silently.
+- Correct obvious speech recognition errors silently, using surrounding context to determine the intended word: homophones ("their" vs "there", "affect" vs "effect"), near-sound substitutions ("SQL" heard as "sequel", "cash" for "cache", "Q&A" for "QA"), and mishearing of product or company names ("Jira" transcribed as "Gyra", "Kubernetes" as "Cooper Netties"). Never carry a clearly misrecognized word into the summary.
 - Distinguish decisions (finalized) from discussions (still open).
 
 **CONCISENESS:**
@@ -414,7 +414,7 @@ pub async fn generate_meeting_summary(
             info!("Split transcript into {} chunks", num_chunks);
 
             let mut chunk_summaries = Vec::new();
-            let system_prompt_chunk = "You are an expert meeting summarizer.";
+            let system_prompt_chunk = "You are an expert meeting summarizer. When summarizing, fix obvious speech recognition errors (homophones, near-sound substitutions, mangled technical or product names) using surrounding context before including them in your summary.";
 
             for (i, chunk) in chunks.iter().enumerate() {
                 // Check for cancellation before processing each chunk
