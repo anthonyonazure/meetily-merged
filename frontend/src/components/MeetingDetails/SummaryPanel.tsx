@@ -7,7 +7,6 @@ import { EmptyStateSummary } from '@/components/EmptyStateSummary';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
-import Analytics from '@/lib/analytics';
 import { useEffect, useRef, useState, RefObject } from 'react';
 import { toast } from 'sonner';
 import { Languages, ChevronDown } from 'lucide-react';
@@ -21,6 +20,7 @@ import {
   saveMeetingSummaryLanguage,
   SummaryLanguageStorage,
 } from '@/lib/summary-language-preferences';
+
 
 interface SummaryPanelProps {
   meeting: {
@@ -420,10 +420,7 @@ export function SummaryPanel({
               onDirtyChange={onDirtyChange}
               status={summaryStatus}
               error={summaryError}
-              onRegenerateSummary={() => {
-                Analytics.trackButtonClick('regenerate_summary', 'meeting_details');
-                onRegenerateSummary();
-              }}
+              onRegenerateSummary={onRegenerateSummary}
               meeting={{
                 id: meeting.id,
                 title: meetingTitle,

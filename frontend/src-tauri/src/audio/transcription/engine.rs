@@ -73,6 +73,7 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
             crate::api::api::TranscriptConfig {
                 provider: "parakeet".to_string(),
                 model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                endpoint_url: None,
                 api_key: None,
             }
         }
@@ -81,6 +82,7 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
             crate::api::api::TranscriptConfig {
                 provider: "parakeet".to_string(),
                 model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                endpoint_url: None,
                 api_key: None,
             }
         }
@@ -135,10 +137,22 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
                 }
             }
         }
+        "remote" => {
+            info!("🔍 Validating remote transcription configuration...");
+            let (url, model_name) = config.resolve_remote_params();
+            // Delegate to RemoteProvider::new for validation (single source of truth)
+            super::remote_provider::RemoteProvider::new(
+                url,
+                config.api_key.clone().unwrap_or_default(),
+                model_name,
+            )?;
+            info!("✅ Remote transcription configuration valid");
+            Ok(())
+        }
         other => {
             warn!("❌ Unsupported transcription provider for local recording: {}", other);
             Err(format!(
-                "Provider '{}' is not supported for local transcription. Please select 'localWhisper' or 'parakeet'.",
+                "Provider '{}' is not supported for local transcription. Please select 'localWhisper', 'parakeet', or 'remote'.",
                 other
             ))
         }
@@ -169,6 +183,7 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
             crate::api::api::TranscriptConfig {
                 provider: "parakeet".to_string(),
                 model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                endpoint_url: None,
                 api_key: None,
             }
         }
@@ -177,6 +192,7 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
             crate::api::api::TranscriptConfig {
                 provider: "parakeet".to_string(),
                 model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                endpoint_url: None,
                 api_key: None,
             }
         }
@@ -212,10 +228,26 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
                 }
             }
         }
-        "localWhisper" | _ => {
+        "remote" => {
+            info!("☁️ Initializing remote transcription engine");
+            let (url, model_name) = config.resolve_remote_params();
+            let provider = super::remote_provider::RemoteProvider::new(
+                url,
+                config.api_key.unwrap_or_default(),
+                model_name,
+            ).map_err(|e| format!("Failed to create remote transcription provider: {}", e))?;
+            Ok(TranscriptionEngine::Provider(Arc::new(provider)))
+        }
+        "localWhisper" => {
             info!("🎤 Initializing Whisper transcription engine");
             let whisper_engine = get_or_init_whisper(app).await?;
             Ok(TranscriptionEngine::Whisper(whisper_engine))
+        }
+        other => {
+            Err(format!(
+                "Unsupported transcription provider '{}'. Supported: parakeet, localWhisper, remote.",
+                other
+            ))
         }
     }
 }

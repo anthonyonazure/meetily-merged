@@ -1,6 +1,130 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex as StdMutex;
+
+/// Debug command to manually test updater connectivity and version comparison.
+/// Bypasses the Tauri updater plugin entirely to diagnose issues.
+///
+/// Keep this endpoint list in sync with `tauri.conf.json`'s
+/// `plugins.updater.endpoints` — drift makes the report misleading.
+#[tauri::command]
+async fn debug_check_update() -> Result<String, String> {
+    const ENDPOINTS: &[(&str, &str)] = &[
+        (
+            "S3 (primary)",
+            "https://s3-dcl1.ethquokkaops.io/automation-public/meetily-updates/latest.json",
+        ),
+        (
+            "AzimovS GitHub Releases (fallback)",
+            "https://github.com/AzimovS/meetily/releases/latest/download/latest.json",
+        ),
+    ];
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    let client = reqwest::Client::builder()
+        .user_agent("tauri-plugin-updater/debug")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let mut report = format!("=== Updater Debug Report ===\n");
+    report.push_str(&format!("Compiled version: {}\n", current_version));
+    report.push_str(&format!("Endpoints to probe: {}\n", ENDPOINTS.len()));
+
+    for &(label, url) in ENDPOINTS {
+        report.push_str(&format!("\n--- {} ---\n", label));
+        report.push_str(&format!("URL: {}\n", url));
+        probe_endpoint(&client, url, current_version, &mut report).await;
+    }
+
+    Ok(report)
+}
+
+async fn probe_endpoint(
+    client: &reqwest::Client,
+    url: &str,
+    current_version: &str,
+    report: &mut String,
+) {
+    // Step 1: Fetch latest.json
+    let response = match client.get(url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            report.push_str(&format!(
+                "HTTP request FAILED: {} (network blocked or endpoint unreachable)\n",
+                e
+            ));
+            return;
+        }
+    };
+
+    let status = response.status();
+    report.push_str(&format!("HTTP status: {}\n", status));
+
+    if !status.is_success() {
+        report.push_str(&format!(
+            "ERROR: Non-success status. Body: {}\n",
+            response.text().await.unwrap_or_default()
+        ));
+        return;
+    }
+
+    let body = match response.text().await {
+        Ok(b) => b,
+        Err(e) => {
+            report.push_str(&format!("Failed to read response body: {}\n", e));
+            return;
+        }
+    };
+
+    // Step 2: Parse JSON
+    let json: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            report.push_str(&format!(
+                "Failed to parse JSON: {}. Body: {}\n",
+                e,
+                &body[..200.min(body.len())]
+            ));
+            return;
+        }
+    };
+
+    let remote_version = json["version"].as_str().unwrap_or("MISSING");
+    report.push_str(&format!("Remote version: {}\n", remote_version));
+
+    // Step 3: Check platforms
+    if let Some(platforms) = json["platforms"].as_object() {
+        report.push_str(&format!(
+            "Platforms: {:?}\n",
+            platforms.keys().collect::<Vec<_>>()
+        ));
+        if let Some(darwin) = platforms.get("darwin-aarch64") {
+            report.push_str(&format!(
+                "darwin-aarch64 URL: {}\n",
+                darwin["url"].as_str().unwrap_or("MISSING")
+            ));
+            report.push_str(&format!(
+                "darwin-aarch64 sig length: {}\n",
+                darwin["signature"].as_str().map(|s| s.len()).unwrap_or(0)
+            ));
+        } else {
+            report.push_str("ERROR: darwin-aarch64 platform MISSING\n");
+        }
+    } else {
+        report.push_str("ERROR: No platforms object in JSON\n");
+    }
+
+    // Step 4: Version comparison
+    let remote_clean = remote_version.trim_start_matches('v');
+    report.push_str(&format!(
+        "Version comparison: {} (remote) vs {} (current)\n",
+        remote_clean, current_version
+    ));
+    report.push_str(&format!(
+        "Update available: {}\n",
+        remote_clean != current_version && remote_clean > current_version
+    ));
+}
 // Removed unused import
 
 // Performance optimization: Conditional logging macros for hot paths
@@ -35,12 +159,12 @@ pub(crate) use perf_trace;
 // Re-export async logging macros for external use (removed due to macro conflicts)
 
 // Declare audio module
-pub mod analytics;
 pub mod api;
 pub mod audio;
 pub mod config;
 pub mod console_utils;
 pub mod database;
+pub mod detection;
 pub mod notifications;
 pub mod ollama;
 pub mod onboarding;
@@ -114,24 +238,6 @@ async fn start_recording<R: Runtime>(
 
             log_info!("Recording started successfully");
 
-            // Show recording started notification through NotificationManager
-            // This respects user's notification preferences
-            let notification_manager_state = app.state::<NotificationManagerState<R>>();
-            if let Err(e) = notifications::commands::show_recording_started_notification(
-                &app,
-                &notification_manager_state,
-                meeting_name.clone(),
-            )
-            .await
-            {
-                log_error!(
-                    "Failed to show recording started notification: {}",
-                    e
-                );
-            } else {
-                log_info!("Successfully showed recording started notification");
-            }
-
             Ok(())
         }
         Err(e) => {
@@ -174,23 +280,6 @@ async fn stop_recording<R: Runtime>(app: AppHandle<R>, args: RecordingArgs) -> R
                         return Err(err_msg);
                     }
                 }
-            }
-
-            // Show recording stopped notification through NotificationManager
-            // This respects user's notification preferences
-            let notification_manager_state = app.state::<NotificationManagerState<R>>();
-            if let Err(e) = notifications::commands::show_recording_stopped_notification(
-                &app,
-                &notification_manager_state,
-            )
-            .await
-            {
-                log_error!(
-                    "Failed to show recording stopped notification: {}",
-                    e
-                );
-            } else {
-                log_info!("Successfully showed recording stopped notification");
             }
 
             Ok(())
@@ -277,8 +366,6 @@ async fn is_audio_level_monitoring() -> bool {
     audio::simple_level_monitor::is_monitoring()
 }
 
-// Analytics commands are now handled by analytics::commands module
-
 // Whisper commands are now handled by whisper_engine::commands module
 
 #[tauri::command]
@@ -313,9 +400,6 @@ async fn start_recording_with_devices_and_meeting<R: Runtime>(
     log_info!("🚀 CALLED start_recording_with_devices_and_meeting - Mic: {:?}, System: {:?}, Meeting: {:?}",
              mic_device_name, system_device_name, meeting_name);
 
-    // Clone meeting_name for notification use later
-    let meeting_name_for_notification = meeting_name.clone();
-
     // Call the recording module functions that support meeting names
     let recording_result = match (mic_device_name.clone(), system_device_name.clone()) {
         (None, None) => {
@@ -346,23 +430,6 @@ async fn start_recording_with_devices_and_meeting<R: Runtime>(
     match recording_result {
         Ok(_) => {
             log_info!("Recording started successfully via tauri command");
-
-            // Show recording started notification through NotificationManager
-            // This respects user's notification preferences
-            let notification_manager_state = app.state::<NotificationManagerState<R>>();
-            if let Err(e) = notifications::commands::show_recording_started_notification(
-                &app,
-                &notification_manager_state,
-                meeting_name_for_notification.clone(),
-            )
-            .await
-            {
-                log_error!(
-                    "Failed to show recording started notification: {}",
-                    e
-                );
-            }
-
             Ok(())
         }
         Err(e) => {
@@ -451,6 +518,16 @@ pub fn run() {
                 }
             });
 
+            // Spawn meeting auto-detection (mic-activity) task. Active
+            // banners only fire on macOS — on other platforms the
+            // sampler factory returns a stub that reports no mic
+            // activity, so the state machine stays idle and nothing
+            // user-visible happens. Recording state is pushed in from
+            // `audio::recording_commands` via `DetectionService::set_recording`
+            // so detection stays decoupled from audio's internal flag.
+            let detection_service = detection::spawn(_app.handle().clone());
+            _app.manage(detection_service);
+
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
 
@@ -524,37 +601,13 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            debug_check_update,
             start_recording,
             stop_recording,
             is_recording,
             get_transcription_status,
             read_audio_file,
             save_transcript,
-            analytics::commands::init_analytics,
-            analytics::commands::disable_analytics,
-            analytics::commands::track_event,
-            analytics::commands::identify_user,
-            analytics::commands::track_meeting_started,
-            analytics::commands::track_recording_started,
-            analytics::commands::track_recording_stopped,
-            analytics::commands::track_meeting_deleted,
-            analytics::commands::track_settings_changed,
-            analytics::commands::track_feature_used,
-            analytics::commands::is_analytics_enabled,
-            analytics::commands::start_analytics_session,
-            analytics::commands::end_analytics_session,
-            analytics::commands::track_daily_active_user,
-            analytics::commands::track_user_first_launch,
-            analytics::commands::is_analytics_session_active,
-            analytics::commands::track_summary_generation_started,
-            analytics::commands::track_summary_generation_completed,
-            analytics::commands::track_summary_regenerated,
-            analytics::commands::track_model_changed,
-            analytics::commands::track_custom_prompt_used,
-            analytics::commands::track_meeting_ended,
-            analytics::commands::track_analytics_enabled,
-            analytics::commands::track_analytics_disabled,
-            analytics::commands::track_analytics_transparency_viewed,
             whisper_engine::commands::whisper_init,
             whisper_engine::commands::whisper_get_available_models,
             whisper_engine::commands::whisper_load_model,
@@ -657,6 +710,7 @@ pub fn run() {
             api::api_save_custom_openai_config,
             api::api_get_custom_openai_config,
             api::api_test_custom_openai_connection,
+            api::api_test_remote_transcription_connection,
             // Summary commands
             summary::commands::api_process_transcript,
             summary::commands::api_get_summary,
@@ -707,6 +761,9 @@ pub fn run() {
             notifications::commands::initialize_notification_manager_manual,
             notifications::commands::test_notification_with_auto_consent,
             notifications::commands::get_notification_stats,
+            notifications::commands::debug_show_notification,
+            detection::commands::dismiss_detected_meeting,
+            detection::commands::get_detection_state,
             // System audio capture commands
             audio::system_audio_commands::start_system_audio_capture_command,
             audio::system_audio_commands::list_system_audio_devices_command,
@@ -759,6 +816,13 @@ pub fn run() {
                 }
                 tauri::RunEvent::Exit => {
                     log::info!("Application exiting, cleaning up resources...");
+
+                    // Signal the detection poll task to exit before tauri
+                    // starts dropping AppHandle / state.
+                    if let Some(svc) = _app_handle.try_state::<detection::DetectionService>() {
+                        svc.shutdown();
+                    }
+
                     tauri::async_runtime::block_on(async {
                         // Clean up database connection and checkpoint WAL
                         if let Some(app_state) = _app_handle.try_state::<state::AppState>() {

@@ -154,18 +154,21 @@ impl SettingsRepository {
         pool: &SqlitePool,
         provider: &str,
         model: &str,
+        endpoint_url: Option<&str>,
     ) -> std::result::Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            INSERT INTO transcript_settings (id, provider, model)
-            VALUES ('1', $1, $2)
+            INSERT INTO transcript_settings (id, provider, model, endpointUrl)
+            VALUES ('1', $1, $2, $3)
             ON CONFLICT(id) DO UPDATE SET
                 provider = excluded.provider,
-                model = excluded.model
+                model = excluded.model,
+                endpointUrl = excluded.endpointUrl
             "#,
         )
         .bind(provider)
         .bind(model)
+        .bind(endpoint_url)
         .execute(pool)
         .await?;
 
@@ -180,6 +183,7 @@ impl SettingsRepository {
         let api_key_column = match provider {
             "localWhisper" => "whisperApiKey",
             "parakeet" => return Ok(()), // Parakeet doesn't need an API key, return early
+            "remote" => "runpodApiKey",
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",
             "groq" => "groqApiKey",
@@ -212,6 +216,7 @@ impl SettingsRepository {
         let api_key_column = match provider {
             "localWhisper" => "whisperApiKey",
             "parakeet" => return Ok(None), // Parakeet doesn't need an API key
+            "remote" => "runpodApiKey",
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",
             "groq" => "groqApiKey",

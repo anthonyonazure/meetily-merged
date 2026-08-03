@@ -99,14 +99,44 @@ pub struct GetApiKeyRequest {
 pub struct TranscriptConfig {
     pub provider: String,
     pub model: String,
+    #[serde(rename = "endpointUrl")]
+    pub endpoint_url: Option<String>,
     #[serde(rename = "apiKey")]
     pub api_key: Option<String>,
+}
+
+impl TranscriptConfig {
+    /// Resolve the remote endpoint URL and model name from the config.
+    ///
+    /// Two-phase deployment: `endpoint_url` is the canonical URL location.
+    /// Falls back to `model` for users who upgraded but still have the URL in `model`
+    /// (from before the endpointUrl migration). This fallback can be removed once
+    /// a Phase 2 migration clears `model` for remote rows.
+    /// See: migrations/20260330000000_add_endpoint_url_to_transcript_settings.sql
+    pub fn resolve_remote_params(&self) -> (String, String) {
+        let has_endpoint_url = self.endpoint_url.as_ref()
+            .filter(|u| !u.is_empty())
+            .is_some();
+        let url = self.endpoint_url.clone()
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| self.model.clone());
+        let model_name = if has_endpoint_url {
+            let m = self.model.clone();
+            // Don't send the URL as the model name (migrated data has URL in both columns)
+            if m == url { String::new() } else { m }
+        } else {
+            String::new()
+        };
+        (url, model_name)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SaveTranscriptConfigRequest {
     pub provider: String,
     pub model: String,
+    #[serde(rename = "endpointUrl")]
+    pub endpoint_url: Option<String>,
     #[serde(rename = "apiKey")]
     pub api_key: Option<String>,
 }
@@ -137,6 +167,8 @@ pub struct MeetingTranscript {
     pub audio_end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 /// Meeting metadata without transcripts (for pagination)
@@ -188,6 +220,8 @@ pub struct TranscriptSegment {
     pub audio_end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -618,6 +652,7 @@ pub async fn api_get_transcript_config<R: Runtime>(
                     Ok(Some(TranscriptConfig {
                         provider: config.provider,
                         model: config.model,
+                        endpoint_url: config.endpoint_url,
                         api_key,
                     }))
                 }
@@ -636,6 +671,7 @@ pub async fn api_get_transcript_config<R: Runtime>(
             Ok(Some(TranscriptConfig {
                 provider: "parakeet".to_string(),
                 model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                endpoint_url: None,
                 api_key: None,
             }))
         }
@@ -652,6 +688,7 @@ pub async fn api_save_transcript_config<R: Runtime>(
     state: tauri::State<'_, AppState>,
     provider: String,
     model: String,
+    endpoint_url: Option<String>,
     api_key: Option<String>,
     _auth_token: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -661,7 +698,14 @@ pub async fn api_save_transcript_config<R: Runtime>(
     );
     let pool = state.db_manager.pool();
 
-    if let Err(e) = SettingsRepository::save_transcript_config(pool, &provider, &model).await {
+    if let Err(e) = SettingsRepository::save_transcript_config(
+        pool,
+        &provider,
+        &model,
+        endpoint_url.as_deref(),
+    )
+    .await
+    {
         log_error!("Failed to save transcript config: {}", e);
         return Err(e.to_string());
     }
@@ -878,6 +922,7 @@ pub async fn api_get_meeting_transcripts<R: Runtime>(
                     audio_start_time: t.audio_start_time,
                     audio_end_time: t.audio_end_time,
                     duration: t.duration,
+                    speaker: t.speaker,
                 })
                 .collect::<Vec<_>>();
 
@@ -1373,6 +1418,164 @@ pub async fn api_test_custom_openai_connection<R: Runtime>(
             log_error!("❌ Custom OpenAI connection test failed: {}", e);
             if e.is_timeout() {
                 Err("Connection timed out. Please check the endpoint URL.".to_string())
+            } else if e.is_connect() {
+                Err("Could not connect to endpoint. Please verify the URL is correct and the server is running.".to_string())
+            } else {
+                Err(format!("Connection failed: {}", e))
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn api_test_remote_transcription_connection<R: Runtime>(
+    _app: AppHandle<R>,
+    endpoint: String,
+    api_key: Option<String>,
+    model: String,
+) -> Result<serde_json::Value, String> {
+    log_info!(
+        "api_test_remote_transcription_connection called: endpoint='{}', model='{}'",
+        &endpoint,
+        &model
+    );
+
+    // Validate endpoint URL format (hard error on parse failure, matching RemoteProvider::new)
+    let parsed_url = url::Url::parse(&endpoint)
+        .map_err(|e| format!("Invalid endpoint URL: {}", e))?;
+
+    // Require HTTPS for non-localhost (matching RemoteProvider::new validation)
+    let is_localhost = parsed_url
+        .host_str()
+        .map(|h| h == "localhost" || h == "127.0.0.1" || h == "::1")
+        .unwrap_or(false);
+    if parsed_url.scheme() != "https" && !is_localhost {
+        return Err(format!(
+            "Endpoint must use HTTPS (got '{}://'). HTTP is only allowed for localhost.",
+            parsed_url.scheme()
+        ));
+    }
+
+    // Validate model name (matching RemoteProvider::new validation)
+    if model.len() > 256 {
+        return Err("Model name must be 256 characters or fewer".to_string());
+    }
+    if model.chars().any(|c| c.is_control() && c != '\t') {
+        return Err("Model name must not contain control characters".to_string());
+    }
+
+    // Generate a tiny silent WAV: 0.5s at 16kHz mono 16-bit PCM
+    let num_samples: usize = 8000;
+    let data_size = num_samples * 2;
+    let file_size = 36 + data_size;
+    let mut wav = Vec::with_capacity(44 + data_size);
+
+    // RIFF header
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(file_size as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+
+    // fmt chunk
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes()); // chunk size
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM format
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&16000u32.to_le_bytes()); // sample rate
+    wav.extend_from_slice(&32000u32.to_le_bytes()); // byte rate
+    wav.extend_from_slice(&2u16.to_le_bytes()); // block align
+    wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+
+    // data chunk
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(data_size as u32).to_le_bytes());
+    wav.extend_from_slice(&vec![0u8; data_size]); // silence
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(40))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let file_part = reqwest::multipart::Part::bytes(wav)
+        .file_name("test.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| format!("Failed to build multipart: {}", e))?;
+
+    let mut form = reqwest::multipart::Form::new().part("file", file_part);
+    if !model.trim().is_empty() {
+        form = form.text("model", model);
+    }
+
+    let mut request = client.post(&endpoint).multipart(form);
+
+    if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
+        request = request.header("Authorization", format!("Bearer {}", key));
+    }
+
+    match request.send().await {
+        Ok(response) => {
+            let status = response.status();
+            let response_text = response.text().await.unwrap_or_default();
+
+            // Truncate response body to avoid leaking sensitive data in logs/errors
+            let truncated_response = if response_text.len() > 500 {
+                format!("{}...(truncated)", &response_text[..500])
+            } else {
+                response_text.clone()
+            };
+
+            if status.is_success() {
+                match serde_json::from_str::<serde_json::Value>(&response_text) {
+                    Ok(json) => {
+                        if json.get("text").is_some() {
+                            log_info!(
+                                "✅ Remote transcription connection test successful - endpoint validated"
+                            );
+                            Ok(serde_json::json!({
+                                "status": "success",
+                                "message": "Connection successful — endpoint accepted audio and returned a valid response",
+                                "http_status": status.as_u16()
+                            }))
+                        } else {
+                            log_warn!("⚠️ Endpoint returned 200 but response is missing 'text' field: {}", truncated_response);
+                            Err("Endpoint returned 200 but response is missing 'text' field. Expected OpenAI-compatible transcription format.".to_string())
+                        }
+                    }
+                    Err(e) => {
+                        log_warn!("⚠️ Endpoint returned 200 but response is not valid JSON: {}", e);
+                        Err(format!(
+                            "Endpoint returned 200 but response is not valid JSON: {}",
+                            e
+                        ))
+                    }
+                }
+            } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                log_warn!(
+                    "⚠️ Remote transcription connection test auth failure: HTTP {}",
+                    status
+                );
+                Err(format!(
+                    "Authentication failed (HTTP {}). Please check your API key.",
+                    status
+                ))
+            } else {
+                log_warn!(
+                    "⚠️ Remote transcription connection test failed with status {}: {}",
+                    status,
+                    truncated_response
+                );
+                Err(format!(
+                    "Connection failed with status {}: {}",
+                    status, truncated_response
+                ))
+            }
+        }
+        Err(e) => {
+            log_error!("❌ Remote transcription connection test failed: {}", e);
+            if e.is_timeout() {
+                Err(
+                    "Connection timed out after 40s. Please check the endpoint URL."
+                        .to_string(),
+                )
             } else if e.is_connect() {
                 Err("Could not connect to endpoint. Please verify the URL is correct and the server is running.".to_string())
             } else {

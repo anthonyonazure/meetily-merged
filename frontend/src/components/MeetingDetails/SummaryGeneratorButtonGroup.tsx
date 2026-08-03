@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Sparkles, Settings, Loader2, FileText, Check, Square } from 'lucide-react';
-import Analytics from '@/lib/analytics';
+
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { useState, useEffect, useRef, ReactNode } from 'react';
@@ -242,6 +242,9 @@ export function SummaryGeneratorButtonGroup({
 
   const isGenerating = summaryStatus === 'processing' || summaryStatus === 'summarizing' || summaryStatus === 'regenerating';
 
+  const currentTemplateName =
+    availableTemplates.find((t) => t.id === selectedTemplate)?.name ?? 'Template';
+
   return (
     <ButtonGroup>
       {/* Generate Summary or Stop button */}
@@ -250,10 +253,7 @@ export function SummaryGeneratorButtonGroup({
           variant="outline"
           size="sm"
           className="bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 border-red-200 xl:px-4"
-          onClick={() => {
-            Analytics.trackButtonClick('stop_summary_generation', 'meeting_details');
-            onStopGeneration();
-          }}
+          onClick={onStopGeneration}
           title="Stop summary generation"
         >
           <Square className="xl:mr-2" size={18} fill="currentColor" />
@@ -264,10 +264,7 @@ export function SummaryGeneratorButtonGroup({
           variant="outline"
           size="sm"
           className="bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 border-blue-200 xl:px-4"
-          onClick={() => {
-            Analytics.trackButtonClick('generate_summary', 'meeting_details');
-            checkOllamaModelsAndGenerate();
-          }}
+          onClick={checkOllamaModelsAndGenerate}
           disabled={isCheckingModels || isModelConfigLoading}
           title={
             isModelConfigLoading
@@ -331,10 +328,13 @@ export function SummaryGeneratorButtonGroup({
             <Button
               variant="outline"
               size="sm"
-              title="Select summary template"
+              title={`Summary template: ${currentTemplateName} (click to change)`}
+              aria-label={`Change summary template. Currently selected: ${currentTemplateName}`}
             >
               <FileText />
-              <span className="hidden lg:inline">Template</span>
+              <span className="hidden lg:inline max-w-[160px] truncate">
+                {currentTemplateName}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

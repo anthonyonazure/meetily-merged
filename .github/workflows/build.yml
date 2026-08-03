@@ -32,6 +32,10 @@ on:
         required: false
         type: boolean
         default: false
+      sign-windows:
+        required: false
+        type: boolean
+        default: false
       repository:
         required: false
         type: string
@@ -56,6 +60,15 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+
+      - name: Verify required macOS entitlements
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if ! grep -q "com.apple.security.network.client" frontend/src-tauri/entitlements.plist; then
+            echo "::error::Missing com.apple.security.network.client entitlement — updater will silently fail (hardened runtime blocks HTTP from Rust)"
+            exit 1
+          fi
 
       - name: Get version from tauri.conf.json.
         id: get-version
@@ -239,7 +252,7 @@ jobs:
           Get-ChildItem $runtimeDir -ErrorAction SilentlyContinue
 
       - name: Setup DigiCert Environment
-        if: contains(inputs.platform, 'windows') && inputs.sign-binaries
+        if: contains(inputs.platform, 'windows') && inputs.sign-windows
         shell: pwsh
         run: |
           # Set environment variables
@@ -282,11 +295,11 @@ jobs:
           "SM_CLIENT_CERT_FILE=D:\Certificate_pkcs12.p12" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup DigiCert KeyLocker
-        if: contains(inputs.platform, 'windows') && inputs.sign-binaries
+        if: contains(inputs.platform, 'windows') && inputs.sign-windows
         uses: digicert/ssm-code-signing@v1.1.1
 
       - name: Sync Certificate to Windows Certificate Store
-        if: contains(inputs.platform, 'windows') && inputs.sign-binaries
+        if: contains(inputs.platform, 'windows') && inputs.sign-windows
         shell: pwsh
         run: |
           Write-Host "============================================================"
@@ -366,7 +379,7 @@ jobs:
           Write-Host ""
 
       - name: Verify DigiCert Setup
-        if: contains(inputs.platform, 'windows') && inputs.sign-binaries
+        if: contains(inputs.platform, 'windows') && inputs.sign-windows
         shell: pwsh
         run: |
           Write-Host "=== DigiCert Setup Verification ==="
@@ -453,13 +466,17 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
           security find-identity -v -p codesigning build.keychain
 
-      - name: Verify certificate
+      - name: Verify certificate and configure signing environment
         if: contains(inputs.platform, 'macos') && inputs.sign-binaries
         run: |
           CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "CERT_ID=$CERT_ID" >> "$GITHUB_ENV"
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
           echo "Certificate imported: $CERT_ID"
+          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
+          echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
 
       - name: Configure build acceleration
         if: contains(inputs.platform, 'macos')
@@ -530,7 +547,7 @@ jobs:
           Get-ChildItem "frontend/src-tauri/binaries/"
 
       - name: Build llama-helper sidecar (macOS/Linux)
-        if: "!contains(inputs.platform, 'windows')"
+        if: "!contains(inputs.platform, 'windows') && !(contains(inputs.platform, 'macos') && inputs.sign-binaries)"
         shell: bash
         run: |
           echo "Building llama-helper sidecar..."
@@ -560,6 +577,26 @@ jobs:
           echo "Copied llama-helper to frontend/src-tauri/binaries/llama-helper-${TARGET}"
           ls -la frontend/src-tauri/binaries/
 
+      - name: Remove externalBin for macOS signed builds (notarization workaround)
+        if: contains(inputs.platform, 'macos') && inputs.sign-binaries
+        shell: bash
+        run: |
+          echo "Removing externalBin from tauri.conf.json to avoid notarization issues with sidecars"
+          cd frontend/src-tauri
+          # Remove the externalBin array to prevent sidecar notarization issues
+          python3 -c "
+          import json
+          with open('tauri.conf.json', 'r') as f:
+              config = json.load(f)
+          if 'externalBin' in config.get('bundle', {}):
+              del config['bundle']['externalBin']
+              print('Removed externalBin from bundle config')
+          with open('tauri.conf.json', 'w') as f:
+              json.dump(config, f, indent=4)
+          "
+          echo "Updated tauri.conf.json:"
+          grep -A2 '"bundle"' tauri.conf.json | head -10
+
       - name: Cache FFmpeg binary
         uses: actions/cache@v4
         with:
@@ -571,13 +608,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_ID: ${{ inputs.sign-binaries && secrets.APPLE_ID || '' }}
-          APPLE_ID_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_ID_PASSWORD || '' }}
-          APPLE_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ inputs.sign-binaries && secrets.APPLE_TEAM_ID || '' }}
-          APPLE_CERTIFICATE: ${{ inputs.sign-binaries && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ inputs.sign-binaries && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ inputs.sign-binaries && env.CERT_ID || '' }}
           # Tauri updater signing (ALWAYS enabled for .sig files)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

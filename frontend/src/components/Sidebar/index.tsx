@@ -9,8 +9,9 @@ import { ConfirmationModal } from '../ConfirmationModel/confirmation-modal';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SettingTabs } from '../SettingTabs';
 import { TranscriptModelProps } from '@/components/TranscriptSettings';
-import Analytics from '@/lib/analytics';
+
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { useRecordingState } from '@/contexts/RecordingStateContext';
@@ -76,6 +77,11 @@ const Sidebar: React.FC = () => {
     model: 'parakeet-tdt-0.6b-v3-int8',
   });
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<boolean | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(console.error);
+  }, []);
 
   // State for edit modal
   const [editModalState, setEditModalState] = useState<{ isOpen: boolean; meetingId: string | null; currentTitle: string }>({
@@ -201,8 +207,7 @@ const Sidebar: React.FC = () => {
       const { emit } = await import('@tauri-apps/api/event');
       await emit('model-config-updated', config);
 
-      // Track settings change
-      await Analytics.trackSettingsChanged('model_config', `${config.provider}_${config.model}`);
+
     } catch (error) {
       console.error('Error saving model config:', error);
       setSettingsSaveSuccess(false);
@@ -215,6 +220,7 @@ const Sidebar: React.FC = () => {
       const payload = {
         provider: configToSave.provider,
         model: configToSave.model,
+        endpointUrl: configToSave.endpointUrl ?? null,
         apiKey: configToSave.apiKey ?? null
       };
       console.log('Saving transcript config with payload:', payload);
@@ -222,15 +228,14 @@ const Sidebar: React.FC = () => {
       await invoke('api_save_transcript_config', {
         provider: payload.provider,
         model: payload.model,
+        endpointUrl: payload.endpointUrl,
         apiKey: payload.apiKey,
       });
 
 
       setSettingsSaveSuccess(true);
 
-      // Track settings change
-      const transcriptConfigToSave = updatedConfig || transcriptModelConfig;
-      await Analytics.trackSettingsChanged('transcript_config', `${transcriptConfigToSave.provider}_${transcriptConfigToSave.model}`);
+
     } catch (error) {
       console.error('Failed to save transcript config:', error);
       setSettingsSaveSuccess(false);
@@ -333,9 +338,6 @@ const Sidebar: React.FC = () => {
       const updatedMeetings = meetings.filter((m: CurrentMeeting) => m.id !== itemId);
       setMeetings(updatedMeetings);
 
-      // Track meeting deletion
-      Analytics.trackMeetingDeleted(itemId);
-
       // Show success toast
       toast.success("Meeting deleted successfully", {
         description: "All associated data has been removed"
@@ -399,9 +401,6 @@ const Sidebar: React.FC = () => {
       if (currentMeeting?.id === meetingId) {
         setCurrentMeeting({ id: meetingId, title: newTitle });
       }
-
-      // Track the edit
-      Analytics.trackButtonClick('edit_meeting_title', 'sidebar');
 
       toast.success("Meeting title updated successfully");
 
@@ -811,7 +810,7 @@ const Sidebar: React.FC = () => {
             </button>
             <Info isCollapsed={isCollapsed} />
             <div className="w-full flex items-center justify-center px-3 py-1 text-xs text-gray-400">
-              v0.4.0
+              {appVersion ? `v${appVersion}` : ''}
             </div>
           </div>
         )}

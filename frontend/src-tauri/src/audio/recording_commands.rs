@@ -248,6 +248,7 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
     info!("🔍 Setting IS_RECORDING to true and resetting SPEECH_DETECTED_EMITTED");
     IS_RECORDING.store(true, Ordering::SeqCst);
     drop(engine_lifecycle_guard);
+    notify_detection_recording_state(&app, true);
     reset_speech_detected_flag(); // Reset for new recording session
 
     // Start optimized parallel transcription task and store handle
@@ -275,6 +276,7 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
                     display_time: update.timestamp.clone(), // Use wall-clock timestamp for display
                     confidence: update.confidence,
                     sequence_id: update.sequence_id,
+                    speaker: update.speaker.clone(),
                 };
 
                 // Save to recording manager
@@ -419,6 +421,7 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
     info!("🔍 Setting IS_RECORDING to true and resetting SPEECH_DETECTED_EMITTED");
     IS_RECORDING.store(true, Ordering::SeqCst);
     drop(engine_lifecycle_guard);
+    notify_detection_recording_state(&app, true);
     reset_speech_detected_flag(); // Reset for new recording session
 
     // Start optimized parallel transcription task and store handle
@@ -446,6 +449,7 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
                     display_time: update.timestamp.clone(), // Use wall-clock timestamp for display
                     confidence: update.confidence,
                     sequence_id: update.sequence_id,
+                    speaker: update.speaker.clone(),
                 };
 
                 // Save to recording manager
@@ -699,109 +703,6 @@ pub async fn stop_recording<R: Runtime>(
         }
     }
 
-    // Step 3.5: Track meeting ended analytics with privacy-safe metadata
-    // Extract all data from manager BEFORE any async operations to avoid Send issues
-    let analytics_data = if let Some(ref manager) = manager_for_cleanup {
-        let state = manager.get_state();
-        let stats = state.get_stats();
-
-        Some((
-            manager.get_recording_duration(),
-            manager.get_active_recording_duration().unwrap_or(0.0),
-            manager.get_total_pause_duration(),
-            manager.get_transcript_segments().len() as u64,
-            state.has_fatal_error(),
-            state.get_microphone_device().map(|d| d.name.clone()),
-            state.get_system_device().map(|d| d.name.clone()),
-            stats.chunks_processed,
-        ))
-    } else {
-        None
-    };
-
-    // Now perform async analytics tracking without holding manager reference
-    if let Some((total_duration, active_duration, pause_duration, transcript_segments_count, had_fatal_error, mic_device_name, sys_device_name, chunks_processed)) = analytics_data {
-        info!("📊 Collecting analytics for meeting end");
-
-        // Helper function to classify device type from device name (privacy-safe)
-        fn classify_device_type(device_name: &str) -> &'static str {
-            let name_lower = device_name.to_lowercase();
-            // Check for Bluetooth keywords
-            if name_lower.contains("bluetooth")
-                || name_lower.contains("airpods")
-                || name_lower.contains("beats")
-                || name_lower.contains("headphones")
-                || name_lower.contains("bt ")
-                || name_lower.contains("wireless") {
-                "Bluetooth"
-            } else {
-                "Wired"
-            }
-        }
-
-        // Get transcription model info (already loaded above for model unload)
-        let transcription_config = match crate::api::api::api_get_transcript_config(
-            app.clone(),
-            app.clone().state(),
-            None,
-        )
-        .await
-        {
-            Ok(Some(config)) => Some((config.provider, config.model)),
-            _ => None,
-        };
-
-        let (transcription_provider, transcription_model) = transcription_config
-            .unwrap_or_else(|| ("unknown".to_string(), "unknown".to_string()));
-
-        // Get summary model info from API
-        let summary_config = match crate::api::api::api_get_model_config(
-            app.clone(),
-            app.clone().state(),
-            None,
-        )
-        .await
-        {
-            Ok(Some(config)) => Some((config.provider, config.model)),
-            _ => None,
-        };
-
-        let (summary_provider, summary_model) = summary_config
-            .unwrap_or_else(|| ("unknown".to_string(), "unknown".to_string()));
-
-        // Classify device types (privacy-safe)
-        let microphone_device_type = mic_device_name
-            .as_ref()
-            .map(|name| classify_device_type(name))
-            .unwrap_or("Unknown");
-
-        let system_audio_device_type = sys_device_name
-            .as_ref()
-            .map(|name| classify_device_type(name))
-            .unwrap_or("Unknown");
-
-        // Track meeting ended event with privacy-safe data
-        match crate::analytics::commands::track_meeting_ended(
-            transcription_provider.clone(),
-            transcription_model.clone(),
-            summary_provider.clone(),
-            summary_model.clone(),
-            total_duration,
-            active_duration,
-            pause_duration,
-            microphone_device_type.to_string(),
-            system_audio_device_type.to_string(),
-            chunks_processed,
-            transcript_segments_count,
-            had_fatal_error,
-        )
-        .await
-        {
-            Ok(_) => info!("✅ Analytics tracked successfully for meeting end"),
-            Err(e) => warn!("⚠️ Failed to track analytics: {}", e),
-        }
-    }
-
     // Step 4: Finalize recording state and cleanup resources safely
     let _ = app.emit(
         "recording-shutdown-progress",
@@ -849,6 +750,7 @@ pub async fn stop_recording<R: Runtime>(
     // Set recording flag to false
     info!("🔍 Setting IS_RECORDING to false");
     IS_RECORDING.store(false, Ordering::SeqCst);
+    notify_detection_recording_state(&app, false);
 
     // Step 4.5: Prepare metadata for frontend (NO database save)
     // NOTE: We do NOT save to database here. The frontend will save after all transcripts are displayed.
@@ -899,6 +801,22 @@ pub async fn stop_recording<R: Runtime>(
 /// Check if recording is active
 pub async fn is_recording() -> bool {
     IS_RECORDING.load(Ordering::SeqCst)
+}
+
+/// Sync form of `is_recording` for callers that aren't async — same
+/// atomic flag as the async version.
+pub fn is_recording_sync() -> bool {
+    IS_RECORDING.load(Ordering::SeqCst)
+}
+
+/// Push the current recording state into the detection service so it
+/// can gate MeetingEnded banners on whether the user is actually
+/// recording. No-op if the service isn't registered yet (rare — only
+/// during startup races or disabled-detection builds).
+fn notify_detection_recording_state<R: Runtime>(app: &AppHandle<R>, recording: bool) {
+    if let Some(svc) = app.try_state::<crate::detection::service::DetectionService>() {
+        svc.set_recording(recording);
+    }
 }
 
 /// Get recording statistics

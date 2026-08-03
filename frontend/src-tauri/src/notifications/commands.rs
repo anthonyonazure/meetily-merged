@@ -5,14 +5,32 @@ use crate::notifications::{
 };
 
 use anyhow::Result;
-use log::{info as log_info, error as log_error};
+use log::{info as log_info, error as log_error, warn as log_warn};
+use serde::{Deserialize, Serialize};
 use tauri::{State, AppHandle, Runtime, Wry};
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_notification::NotificationExt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Shared notification manager state
 pub type NotificationManagerState<R> = Arc<RwLock<Option<NotificationManager<R>>>>;
+
+/// Identifier for the kind of notification the debug dropdown can fire.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugNotificationKind {
+    RecordingStarted,
+    RecordingStopped,
+    RecordingPaused,
+    RecordingResumed,
+    TranscriptionComplete,
+    MeetingReminder,
+    SystemError,
+    Test,
+    MeetingDetected,
+    MeetingEnded,
+}
 
 /// Initialize the notification manager (called during app setup)
 pub async fn initialize_notification_manager<R: Runtime>(
@@ -279,6 +297,61 @@ pub async fn get_notification_stats(
     }
 }
 
+/// Fire a notification of the given `kind` with placeholder data through the real production code path.
+#[tauri::command]
+pub async fn debug_show_notification(
+    app: AppHandle<Wry>,
+    kind: DebugNotificationKind,
+    manager_state: State<'_, NotificationManagerState<Wry>>,
+) -> Result<(), String> {
+    log_info!("Debug: firing {:?} notification", kind);
+
+    let fake_meeting = "Debug Meeting".to_string();
+    let fake_path = "/tmp/meetily-debug/transcript.txt".to_string();
+    let fake_error = "This is a debug system-error notification".to_string();
+    let fake_minutes: u64 = 5;
+
+    let result: Result<()> = match kind {
+        DebugNotificationKind::RecordingStarted => {
+            show_recording_started_notification(&app, manager_state.inner(), Some(fake_meeting)).await
+        }
+        DebugNotificationKind::RecordingStopped => {
+            show_recording_stopped_notification(&app, manager_state.inner()).await
+        }
+        DebugNotificationKind::RecordingPaused => {
+            show_recording_paused_notification(manager_state.inner()).await
+        }
+        DebugNotificationKind::RecordingResumed => {
+            show_recording_resumed_notification(manager_state.inner()).await
+        }
+        DebugNotificationKind::TranscriptionComplete => {
+            show_transcription_complete_notification(manager_state.inner(), Some(fake_path)).await
+        }
+        DebugNotificationKind::MeetingReminder => {
+            show_meeting_reminder_notification(manager_state.inner(), fake_minutes, Some(fake_meeting)).await
+        }
+        DebugNotificationKind::SystemError => {
+            show_system_error_notification(manager_state.inner(), fake_error).await
+        }
+        DebugNotificationKind::Test => {
+            let manager_lock = manager_state.read().await;
+            match manager_lock.as_ref() {
+                Some(m) => m.show_test_notification().await,
+                None => Err(anyhow::anyhow!("Notification manager not initialized")),
+            }
+        }
+        DebugNotificationKind::MeetingDetected => {
+            show_meeting_detected_notification(&app, manager_state.inner(), "Zoom".to_string())
+                .await
+        }
+        DebugNotificationKind::MeetingEnded => {
+            show_meeting_ended_notification(&app, manager_state.inner(), "Zoom".to_string()).await
+        }
+    };
+
+    result.map_err(|e| format!("Failed to show debug notification: {}", e))
+}
+
 // Helper functions for showing specific notification types
 // These are used internally by the app and don't need to be Tauri commands
 
@@ -321,7 +394,7 @@ pub async fn show_recording_started_notification<R: Runtime>(
             Err(e) => {
                 log_error!("Failed to initialize notification manager: {}", e);
 
-                // Check settings before showing fallback notification
+                // Check settings before attempting fallback.
                 use crate::notifications::settings::ConsentManager;
                 let consent_manager = ConsentManager::new(app_handle.clone())?;
                 let settings = consent_manager.load_settings().await.unwrap_or_default();
@@ -331,27 +404,43 @@ pub async fn show_recording_started_notification<R: Runtime>(
                     return Ok(());
                 }
 
-                // Fallback: Use Tauri's notification API directly
-                let title = "Meetily";
-                let body = match meeting_name {
-                    Some(name) => format!("Recording started for meeting: {}", name),
-                    None => "Recording has started. Please inform others in the meeting that you are recording.".to_string(),
-                };
-
-                log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
-
-                match app_handle.notification().builder()
-                    .title(title)
-                    .body(body)
-                    .show()
+                // On macOS we intentionally do NOT fall back to the `tauri-plugin-notification`
+                // builder: it routes through the deprecated `NSUserNotification` path, whose
+                // banners do not deliver on modern macOS and which could race with our
+                // UNUserNotificationCenterDelegate (last-writer-wins `setDelegate:`). See
+                // docs/solutions/build-errors/macos-dev-build-notifications-and-signing.md.
+                #[cfg(target_os = "macos")]
                 {
-                    Ok(_) => {
-                        log_info!("Successfully showed fallback notification: {}", title);
-                        Ok(())
-                    }
-                    Err(e) => {
-                        log_error!("Failed to show fallback notification: {}", e);
-                        Err(anyhow::anyhow!("Failed to show notification: {}", e))
+                    log_warn!(
+                        "Manager init failed on macOS; skipping deprecated NS fallback. \
+                         Notification dropped: recording_started"
+                    );
+                    Ok(())
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let title = "Meetily";
+                    let body = match meeting_name {
+                        Some(name) => format!("Recording started for meeting: {}", name),
+                        None => "Recording has started. Please inform others in the meeting that you are recording.".to_string(),
+                    };
+
+                    log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
+
+                    match app_handle.notification().builder()
+                        .title(title)
+                        .body(body)
+                        .show()
+                    {
+                        Ok(_) => {
+                            log_info!("Successfully showed fallback notification: {}", title);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            log_error!("Failed to show fallback notification: {}", e);
+                            Err(anyhow::anyhow!("Failed to show notification: {}", e))
+                        }
                     }
                 }
             }
@@ -381,24 +470,36 @@ pub async fn show_recording_stopped_notification<R: Runtime>(
             return Ok(());
         }
 
-        // Use direct Tauri notification as fallback for stop notification
-        let title = "Meetily";
-        let body = "Recording has stopped";
-
-        log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
-
-        match app_handle.notification().builder()
-            .title(title)
-            .body(body)
-            .show()
+        // On macOS: same reasoning as show_recording_started_notification above.
+        #[cfg(target_os = "macos")]
         {
-            Ok(_) => {
-                log_info!("Successfully showed fallback notification: {}", title);
-                Ok(())
-            }
-            Err(e) => {
-                log_error!("Failed to show fallback notification: {}", e);
-                Err(anyhow::anyhow!("Failed to show notification: {}", e))
+            log_warn!(
+                "Manager uninitialized on macOS; skipping deprecated NS fallback. \
+                 Notification dropped: recording_stopped"
+            );
+            Ok(())
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let title = "Meetily";
+            let body = "Recording has stopped";
+
+            log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
+
+            match app_handle.notification().builder()
+                .title(title)
+                .body(body)
+                .show()
+            {
+                Ok(_) => {
+                    log_info!("Successfully showed fallback notification: {}", title);
+                    Ok(())
+                }
+                Err(e) => {
+                    log_error!("Failed to show fallback notification: {}", e);
+                    Err(anyhow::anyhow!("Failed to show notification: {}", e))
+                }
             }
         }
     }
@@ -455,5 +556,85 @@ pub async fn show_system_error_notification(
     } else {
         log_error!("Cannot show system error notification: manager not initialized");
         Ok(())
+    }
+}
+
+/// Show meeting reminder notification (internal use)
+pub async fn show_meeting_reminder_notification(
+    manager_state: &NotificationManagerState<Wry>,
+    minutes_until: u64,
+    meeting_title: Option<String>,
+) -> Result<()> {
+    let manager_lock = manager_state.read().await;
+    if let Some(manager) = manager_lock.as_ref() {
+        manager.show_meeting_reminder(minutes_until, meeting_title).await
+    } else {
+        log_error!("Cannot show meeting reminder notification: manager not initialized");
+        Ok(())
+    }
+}
+
+/// Show "Meeting detected" notification. Lazy-initializes the manager on
+/// first call, matching `show_recording_started_notification`.
+pub async fn show_meeting_detected_notification<R: Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    manager_state: &NotificationManagerState<R>,
+    app_name: String,
+) -> Result<()> {
+    log_info!("Attempting to show meeting-detected notification for: {}", app_name);
+
+    let manager_lock = manager_state.read().await;
+    if let Some(manager) = manager_lock.as_ref() {
+        return manager.show_meeting_detected(app_name).await;
+    }
+    drop(manager_lock);
+
+    match initialize_notification_manager(app_handle.clone()).await {
+        Ok(manager) => {
+            let mut state_lock = manager_state.write().await;
+            *state_lock = Some(manager);
+            drop(state_lock);
+            let manager_lock = manager_state.read().await;
+            match manager_lock.as_ref() {
+                Some(manager) => manager.show_meeting_detected(app_name).await,
+                None => Ok(()),
+            }
+        }
+        Err(e) => {
+            log_error!("Failed to init notification manager for meeting-detected: {}", e);
+            Ok(())
+        }
+    }
+}
+
+/// Show "Meeting ended" notification. Same pattern as meeting-detected.
+pub async fn show_meeting_ended_notification<R: Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    manager_state: &NotificationManagerState<R>,
+    app_name: String,
+) -> Result<()> {
+    log_info!("Attempting to show meeting-ended notification for: {}", app_name);
+
+    let manager_lock = manager_state.read().await;
+    if let Some(manager) = manager_lock.as_ref() {
+        return manager.show_meeting_ended(app_name).await;
+    }
+    drop(manager_lock);
+
+    match initialize_notification_manager(app_handle.clone()).await {
+        Ok(manager) => {
+            let mut state_lock = manager_state.write().await;
+            *state_lock = Some(manager);
+            drop(state_lock);
+            let manager_lock = manager_state.read().await;
+            match manager_lock.as_ref() {
+                Some(manager) => manager.show_meeting_ended(app_name).await,
+                None => Ok(()),
+            }
+        }
+        Err(e) => {
+            log_error!("Failed to init notification manager for meeting-ended: {}", e);
+            Ok(())
+        }
     }
 }

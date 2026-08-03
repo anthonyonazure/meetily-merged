@@ -9,7 +9,6 @@ import { useRecordingState, RecordingStatus } from '@/contexts/RecordingStateCon
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { StatusOverlays } from '@/app/_components/StatusOverlays';
-import Analytics from '@/lib/analytics';
 import { SettingsModals } from './_components/SettingsModal';
 import { TranscriptPanel } from './_components/TranscriptPanel';
 import { useModalState } from '@/hooks/useModalState';
@@ -61,11 +60,6 @@ export default function Home() {
   } = useTranscriptRecovery();
 
   const router = useRouter();
-
-  useEffect(() => {
-    // Track page view
-    Analytics.trackPageView('home');
-  }, []);
 
   // Startup recovery check
   useEffect(() => {
@@ -257,6 +251,7 @@ export default function Home() {
         <StatusOverlays
           isProcessing={status === RecordingStatus.PROCESSING_TRANSCRIPTS && !recordingState.isRecording}
           isSaving={status === RecordingStatus.SAVING}
+          processingMessage={recordingState.statusMessage}
           sidebarCollapsed={sidebarCollapsed}
         />
       </div>

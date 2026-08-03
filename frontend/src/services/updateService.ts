@@ -61,9 +61,13 @@ export class UpdateService {
 
     try {
       const currentVersion = await getVersion();
+      console.log(`[Updater] Current app version: ${currentVersion}`);
+
       const update = await check();
 
-      if (update?.available) {
+      // check() returns null when no update is available, or an Update object
+      if (update && update.available) {
+        console.log(`[Updater] Update available: ${update.version}`);
         return {
           available: true,
           currentVersion,
@@ -73,12 +77,13 @@ export class UpdateService {
         };
       }
 
+      console.log(`[Updater] No update available (check returned ${update === null ? 'null' : 'object with available=false'})`);
       return {
         available: false,
         currentVersion,
       };
     } catch (error) {
-      console.error('Failed to check for updates:', error);
+      console.error('[Updater] check() threw error:', error);
       throw error;
     } finally {
       this.updateCheckInProgress = false;

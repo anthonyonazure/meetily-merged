@@ -25,6 +25,10 @@
 # production
 /build
 
+# plans and brainstorms (keep docs/solutions/ tracked)
+docs/plans/
+docs/brainstorms/
+
 # misc
 .DS_Store
 *.pem

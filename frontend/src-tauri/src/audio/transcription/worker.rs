@@ -2,13 +2,15 @@
 //
 // Parallel transcription worker pool and chunk processing logic.
 
+use super::constants::FAILED_CHUNK_PLACEHOLDER;
 use super::engine::TranscriptionEngine;
 use super::provider::TranscriptionError;
 use crate::audio::AudioChunk;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Runtime};
 
 // Sequence counter for transcript updates
@@ -17,10 +19,118 @@ static SEQUENCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 // Speech detection flag - reset per recording session
 static SPEECH_DETECTED_EMITTED: AtomicBool = AtomicBool::new(false);
 
+// Model-not-loaded error emission flag - emit only once per session to avoid toast spam
+static MODEL_UNLOADED_EMITTED: AtomicBool = AtomicBool::new(false);
+
+// Remote-auth-rejected error emission flag - emit only once per session. Without
+// this, a bad API key produces a silent stream of "failed chunk" placeholders
+// with no recovery prompt; with it, the user gets one actionable toast.
+static AUTH_ERROR_EMITTED: AtomicBool = AtomicBool::new(false);
+
+// Global echo deduplicator - shared across worker iterations
+static ECHO_DEDUP: std::sync::LazyLock<Mutex<EchoDeduplicator>> =
+    std::sync::LazyLock::new(|| Mutex::new(EchoDeduplicator::new()));
+
+/// Text-based echo deduplication.
+/// When system audio plays through speakers, the mic picks it up and Whisper
+/// transcribes it as "You". This deduplicator compares "You" transcripts against
+/// recent "Others" transcripts and drops duplicates.
+struct EchoDeduplicator {
+    /// Recent "Others" segments: (normalized_text, audio_start_time)
+    others_buffer: VecDeque<(Vec<String>, f64)>,
+    max_buffer_size: usize,
+    time_window_secs: f64,
+}
+
+impl EchoDeduplicator {
+    fn new() -> Self {
+        Self {
+            others_buffer: VecDeque::new(),
+            max_buffer_size: 30,
+            time_window_secs: 3.0,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.others_buffer.clear();
+    }
+
+    /// Record an "Others" segment for future comparison
+    fn record_others(&mut self, text: &str, start_time: f64) {
+        let words = Self::normalize_to_words(text);
+        if !words.is_empty() {
+            self.others_buffer.push_back((words, start_time));
+            if self.others_buffer.len() > self.max_buffer_size {
+                self.others_buffer.pop_front();
+            }
+        }
+    }
+
+    /// Check if a "You" segment is an echo of a recent "Others" segment
+    fn is_echo(&self, text: &str, start_time: f64) -> bool {
+        let you_words = Self::normalize_to_words(text);
+        if you_words.len() < 2 { return false; } // Single words too ambiguous
+
+        // Length-adaptive threshold
+        let threshold = if you_words.len() <= 3 { 0.75 }
+                        else if you_words.len() <= 6 { 0.65 }
+                        else { 0.55 };
+
+        for (other_words, other_time) in &self.others_buffer {
+            if (start_time - other_time).abs() > self.time_window_secs {
+                continue;
+            }
+            let sim = Self::bag_jaccard(&you_words, other_words);
+            if sim >= threshold {
+                info!("🔇 Echo detected: '{}' matches Others segment (similarity={:.2})", text, sim);
+                return true;
+            }
+        }
+        false
+    }
+
+    fn normalize_to_words(text: &str) -> Vec<String> {
+        text.to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect::<String>()
+            .split_whitespace()
+            .filter(|w| !w.is_empty())
+            .map(|w| w.to_string())
+            .collect()
+    }
+
+    fn bag_jaccard(a: &[String], b: &[String]) -> f64 {
+        let mut count_a: HashMap<&str, usize> = HashMap::new();
+        let mut count_b: HashMap<&str, usize> = HashMap::new();
+        for w in a { *count_a.entry(w.as_str()).or_default() += 1; }
+        for w in b { *count_b.entry(w.as_str()).or_default() += 1; }
+
+        let all_keys: std::collections::HashSet<&str> =
+            count_a.keys().chain(count_b.keys()).copied().collect();
+
+        let mut intersection = 0usize;
+        let mut union_size = 0usize;
+        for key in all_keys {
+            let ca = count_a.get(key).copied().unwrap_or(0);
+            let cb = count_b.get(key).copied().unwrap_or(0);
+            intersection += ca.min(cb);
+            union_size += ca.max(cb);
+        }
+        if union_size == 0 { 0.0 } else { intersection as f64 / union_size as f64 }
+    }
+}
+
 /// Reset the speech detected flag for a new recording session
 pub fn reset_speech_detected_flag() {
     SPEECH_DETECTED_EMITTED.store(false, Ordering::SeqCst);
+    MODEL_UNLOADED_EMITTED.store(false, Ordering::SeqCst);
+    AUTH_ERROR_EMITTED.store(false, Ordering::SeqCst);
     info!("🔍 SPEECH_DETECTED_EMITTED reset to: {}", SPEECH_DETECTED_EMITTED.load(Ordering::SeqCst));
+    // Also reset echo deduplicator
+    if let Ok(mut dedup) = ECHO_DEDUP.lock() {
+        dedup.reset();
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -36,6 +146,8 @@ pub struct TranscriptUpdate {
     pub audio_start_time: f64, // Seconds from recording start (e.g., 125.3)
     pub audio_end_time: f64,   // Seconds from recording start (e.g., 128.6)
     pub duration: f64,          // Segment duration in seconds (e.g., 3.3)
+    // Speaker attribution from audio source
+    pub speaker: String, // "You" (mic) or "Others" (system audio)
 }
 
 // NOTE: get_transcript_history and get_recording_meeting_name functions
@@ -134,23 +246,29 @@ pub fn start_transcription_task<R: Runtime>(
 
                             // Check if model is still loaded before processing
                             if !engine_clone.is_model_loaded().await {
-                                warn!("⚠️ Worker {}: Model unloaded, but continuing to preserve chunk {}", worker_id, chunk.chunk_id);
-                                // Still count as completed even if we can't process
+                                warn!("⚠️ Worker {}: Model unloaded, skipping chunk {}", worker_id, chunk.chunk_id);
+                                // Emit error ONCE per session so user knows transcription is broken
+                                if !MODEL_UNLOADED_EMITTED.swap(true, Ordering::SeqCst) {
+                                    error!("❌ Worker {}: Model not loaded - emitting user-visible error", worker_id);
+                                    let _ = app_clone.emit("transcription-error", serde_json::json!({
+                                        "error": "Transcription model not loaded",
+                                        "userMessage": "Speech recognition model failed to load. Recording continues but transcription is unavailable. Try restarting the app.",
+                                        "actionable": true
+                                    }));
+                                }
                                 chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
                                 continue;
                             }
 
                             let chunk_timestamp = chunk.timestamp;
                             let chunk_duration = chunk.data.len() as f64 / chunk.sample_rate as f64;
+                            let speaker = match chunk.device_type {
+                                crate::audio::RecordingDeviceType::Microphone => "You".to_string(),
+                                crate::audio::RecordingDeviceType::System => "Others".to_string(),
+                            };
 
                             // Transcribe with provider-agnostic approach
-                            match transcribe_chunk_with_provider(
-                                &engine_clone,
-                                chunk,
-                                &app_clone,
-                            )
-                            .await
-                            {
+                            match transcribe_chunk_with_provider(&engine_clone, chunk).await {
                                 Ok((transcript, confidence_opt, is_partial)) => {
                                     // Provider-aware confidence threshold
                                     let confidence_threshold = match &engine_clone {
@@ -191,19 +309,23 @@ pub fn start_transcription_task<R: Runtime>(
                                             info!("🔍 Speech already detected in this session, not re-emitting");
                                         }
 
-                                        // Generate sequence ID and calculate timestamps FIRST
+                                        // Echo deduplication: check "You" segments against recent "Others"
+                                        let audio_start_time = chunk_timestamp;
+                                        if let Ok(mut dedup) = ECHO_DEDUP.lock() {
+                                            if speaker == "Others" {
+                                                dedup.record_others(&transcript, audio_start_time);
+                                            } else if speaker == "You" && dedup.is_echo(&transcript, audio_start_time) {
+                                                // This "You" segment is echo of system audio - skip it
+                                                chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                                continue;
+                                            }
+                                        }
+
+                                        // Generate sequence ID and calculate timestamps
                                         let sequence_id = SEQUENCE_COUNTER.fetch_add(1, Ordering::SeqCst);
-                                        let audio_start_time = chunk_timestamp; // Already in seconds from recording start
                                         let audio_end_time = chunk_timestamp + chunk_duration;
 
-                                        // Save structured transcript segment to recording manager (only final results)
-                                        // Save ALL segments (partial and final) to ensure complete JSON
-                                        // Create structured segment with full timestamp data
-                                        // NOTE: This is now handled via the transcript-update event emission below
-                                        // The recording_commands module listens to these events and saves them
-                                        // This decouples the transcription worker from direct RECORDING_MANAGER access
-
-                                        // Emit transcript update with NEW recording-relative timestamps
+                                        // Emit transcript update
 
                                         let update = TranscriptUpdate {
                                             text: transcript,
@@ -217,6 +339,7 @@ pub fn start_transcription_task<R: Runtime>(
                                             audio_start_time,
                                             audio_end_time,
                                             duration: chunk_duration,
+                                            speaker: speaker.clone(),
                                         };
 
                                         if let Err(e) = app_clone.emit("transcript-update", &update)
@@ -249,9 +372,61 @@ pub fn start_transcription_task<R: Runtime>(
                                             chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
                                             continue;
                                         }
-                                        _ => {
-                                            warn!("Worker {}: Transcription failed: {}", worker_id, e);
-                                            let _ = app_clone.emit("transcription-warning", e.to_string());
+                                        TranscriptionError::EngineFailed(_)
+                                        | TranscriptionError::UnsupportedLanguage(_)
+                                        | TranscriptionError::AuthFailed(_) => {
+                                            // Emit an in-transcript placeholder so the failure is
+                                            // visible at its timestamp instead of as a disembodied
+                                            // toast. Skip speech-detected + echo dedup: a placeholder
+                                            // is not spoken content.
+                                            warn!(
+                                                "Worker {}: Transcription failed, emitting placeholder: {}",
+                                                worker_id, e
+                                            );
+
+                                            // For auth failures specifically, also emit a one-shot
+                                            // actionable toast — otherwise a bad API key produces a
+                                            // silent stream of placeholders with no recovery prompt.
+                                            if matches!(e, TranscriptionError::AuthFailed(_))
+                                                && !AUTH_ERROR_EMITTED.swap(true, Ordering::SeqCst)
+                                            {
+                                                error!("Worker {}: Remote auth rejected — emitting user-visible error", worker_id);
+                                                let _ = app_clone.emit(
+                                                    "transcription-error",
+                                                    serde_json::json!({
+                                                        "error": "Remote transcription auth failed",
+                                                        "userMessage": "Remote transcription rejected your credentials. Check your API key in Transcription settings.",
+                                                        "actionable": false
+                                                    }),
+                                                );
+                                            }
+
+                                            let sequence_id =
+                                                SEQUENCE_COUNTER.fetch_add(1, Ordering::SeqCst);
+                                            let audio_end_time = chunk_timestamp + chunk_duration;
+
+                                            let placeholder = TranscriptUpdate {
+                                                text: FAILED_CHUNK_PLACEHOLDER.to_string(),
+                                                timestamp: format_current_timestamp(),
+                                                source: "Audio".to_string(),
+                                                sequence_id,
+                                                chunk_start_time: chunk_timestamp,
+                                                is_partial: false,
+                                                confidence: 0.0,
+                                                audio_start_time: chunk_timestamp,
+                                                audio_end_time,
+                                                duration: chunk_duration,
+                                                speaker: speaker.clone(),
+                                            };
+
+                                            if let Err(emit_err) =
+                                                app_clone.emit("transcript-update", &placeholder)
+                                            {
+                                                error!(
+                                                    "Worker {}: Failed to emit placeholder: {}",
+                                                    worker_id, emit_err
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -405,10 +580,9 @@ pub fn start_transcription_task<R: Runtime>(
 
 /// Transcribe audio chunk using the appropriate provider (Whisper, Parakeet, or trait-based)
 /// Returns: (text, confidence Option, is_partial)
-async fn transcribe_chunk_with_provider<R: Runtime>(
+async fn transcribe_chunk_with_provider(
     engine: &TranscriptionEngine,
     chunk: AudioChunk,
-    app: &AppHandle<R>,
 ) -> std::result::Result<(String, Option<f32>, bool), TranscriptionError> {
     // Convert to 16kHz mono for transcription
     let transcription_data = if chunk.sample_rate != 16000 {
@@ -470,18 +644,9 @@ async fn transcribe_chunk_with_provider<R: Runtime>(
                         "Whisper transcription failed for chunk {}: {}",
                         chunk.chunk_id, e
                     );
-
-                    let transcription_error = TranscriptionError::EngineFailed(e.to_string());
-                    let _ = app.emit(
-                        "transcription-error",
-                        &serde_json::json!({
-                            "error": transcription_error.to_string(),
-                            "userMessage": format!("Transcription failed: {}", transcription_error),
-                            "actionable": false
-                        }),
-                    );
-
-                    Err(transcription_error)
+                    // No toast: the worker emits a FAILED_CHUNK_PLACEHOLDER
+                    // into the transcript stream when this error surfaces.
+                    Err(TranscriptionError::EngineFailed(e.to_string()))
                 }
             }
         }
@@ -506,18 +671,9 @@ async fn transcribe_chunk_with_provider<R: Runtime>(
                         "Parakeet transcription failed for chunk {}: {}",
                         chunk.chunk_id, e
                     );
-
-                    let transcription_error = TranscriptionError::EngineFailed(e.to_string());
-                    let _ = app.emit(
-                        "transcription-error",
-                        &serde_json::json!({
-                            "error": transcription_error.to_string(),
-                            "userMessage": format!("Transcription failed: {}", transcription_error),
-                            "actionable": false
-                        }),
-                    );
-
-                    Err(transcription_error)
+                    // No toast: the worker emits a FAILED_CHUNK_PLACEHOLDER
+                    // into the transcript stream when this error surfaces.
+                    Err(TranscriptionError::EngineFailed(e.to_string()))
                 }
             }
         }
@@ -555,16 +711,8 @@ async fn transcribe_chunk_with_provider<R: Runtime>(
                         chunk.chunk_id,
                         e
                     );
-
-                    let _ = app.emit(
-                        "transcription-error",
-                        &serde_json::json!({
-                            "error": e.to_string(),
-                            "userMessage": format!("Transcription failed: {}", e),
-                            "actionable": false
-                        }),
-                    );
-
+                    // No toast: the worker emits a FAILED_CHUNK_PLACEHOLDER
+                    // into the transcript stream when this error surfaces.
                     Err(e)
                 }
             }
