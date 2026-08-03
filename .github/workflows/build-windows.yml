@@ -512,6 +512,16 @@ jobs:
           workspaces: ". -> target"
           key: windows-x64-vulkan-v2
 
+      # rust-cache restores sherpa-onnx-sys as "fresh" but prunes its
+      # downloaded prebuilt libs from target/, leaving the linker pointing at
+      # a missing directory. Force the build script to rerun in that case.
+      - name: Rebuild sherpa-onnx-sys if prebuilt libs were pruned from cache
+        shell: bash
+        run: |
+          if [ ! -d target/sherpa-onnx-prebuilt ]; then
+            cargo clean -p sherpa-onnx-sys 2>/dev/null || true
+          fi
+
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@30ba978f977e81b72d091fc8888feb1fb26f9aff # v1.2
         with:
