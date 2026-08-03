@@ -69,9 +69,29 @@ const SPEAKER_COLORS: Record<string, { border: string; text: string }> = {
     'Others': { border: 'border-l-orange-500', text: 'text-orange-600' },
 };
 
+// Stable palette for diarized "Speaker N" labels: the same speaker number
+// always maps to the same color, across renders and views.
+const DIARIZED_SPEAKER_PALETTE: { border: string; text: string }[] = [
+    { border: 'border-l-orange-500', text: 'text-orange-600' },
+    { border: 'border-l-purple-500', text: 'text-purple-600' },
+    { border: 'border-l-teal-500', text: 'text-teal-600' },
+    { border: 'border-l-pink-500', text: 'text-pink-600' },
+    { border: 'border-l-indigo-500', text: 'text-indigo-600' },
+    { border: 'border-l-amber-500', text: 'text-amber-600' },
+    { border: 'border-l-cyan-500', text: 'text-cyan-600' },
+    { border: 'border-l-rose-500', text: 'text-rose-600' },
+];
+
 function getSpeakerStyle(speaker?: string) {
     if (!speaker) return { border: '', text: '' };
-    return SPEAKER_COLORS[speaker] ?? { border: 'border-l-gray-400', text: 'text-gray-500' };
+    const known = SPEAKER_COLORS[speaker];
+    if (known) return known;
+    const diarized = /^Speaker (\d+)$/.exec(speaker);
+    if (diarized) {
+        const index = (parseInt(diarized[1], 10) - 1) % DIARIZED_SPEAKER_PALETTE.length;
+        return DIARIZED_SPEAKER_PALETTE[Math.max(0, index)];
+    }
+    return { border: 'border-l-gray-400', text: 'text-gray-500' };
 }
 
 // Memoized transcript segment component

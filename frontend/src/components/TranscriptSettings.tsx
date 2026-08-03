@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { ModelManager } from './WhisperModelManager';
 import { ParakeetModelManager } from './ParakeetModelManager';
+import { DiarizationSettings } from './DiarizationSettings';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { RefreshCw, CheckCircle2 } from 'lucide-react';
@@ -285,6 +286,9 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                         </Button>
                     </div>
                 )}
+
+                {/* Post-recording speaker diarization (on-device, provider-independent) */}
+                <DiarizationSettings />
             </div>
         </div>
     );

@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import { Transcript, MeetingMetadata, PaginatedTranscriptsResponse, TranscriptSegmentData } from "@/types";
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -192,6 +194,67 @@ export function usePaginatedTranscripts({
 
         loadInitial();
     }, [meetingId, reset, loadMetadata, loadTranscriptsAtOffset]);
+
+    // Speaker diarization events: the backend refines "Others" lines into
+    // "Speaker N" labels in the background after a recording is saved. When the
+    // currently open meeting gets diarized, refetch so the labels appear.
+    // All events are non-blocking; a failed diarization only shows a toast.
+    useEffect(() => {
+        if (!meetingId) return;
+
+        const unlisteners: (() => void)[] = [];
+        let cancelled = false;
+
+        const setup = async () => {
+            const started = await listen<{ meeting_id: string }>(
+                'transcript-diarization-started',
+                (event) => {
+                    if (event.payload.meeting_id !== meetingId) return;
+                    toast.info('Identifying speakers...', { id: 'diarization' });
+                }
+            );
+            const diarized = await listen<{ meeting_id: string; num_speakers: number; updated_count: number }>(
+                'transcript-diarized',
+                async (event) => {
+                    if (event.payload.meeting_id !== meetingId) return;
+                    await refetch();
+                    if (event.payload.updated_count > 0) {
+                        toast.success('Speaker labels updated', {
+                            id: 'diarization',
+                            description: `${event.payload.num_speakers} speaker${event.payload.num_speakers === 1 ? '' : 's'} detected.`,
+                        });
+                    } else {
+                        toast.dismiss('diarization');
+                    }
+                }
+            );
+            const failed = await listen<{ meeting_id: string; error: string }>(
+                'transcript-diarization-error',
+                (event) => {
+                    if (event.payload.meeting_id !== meetingId) return;
+                    toast.warning('Speaker identification unavailable', {
+                        id: 'diarization',
+                        description: 'The transcript is unaffected. You can retry from the meeting transcript panel.',
+                    });
+                    console.warn('Diarization failed:', event.payload.error);
+                }
+            );
+            if (cancelled) {
+                started();
+                diarized();
+                failed();
+                return;
+            }
+            unlisteners.push(started, diarized, failed);
+        };
+
+        setup();
+
+        return () => {
+            cancelled = true;
+            unlisteners.forEach(fn => fn());
+        };
+    }, [meetingId, refetch]);
 
     // Convert to segments (memoized)
     const segments = useMemo(() =>
