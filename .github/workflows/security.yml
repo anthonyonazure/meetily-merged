@@ -79,6 +79,8 @@ jobs:
 
   codeql:
     name: CodeQL (JavaScript/TypeScript)
+    # Code scanning upload requires GitHub Advanced Security on private repos.
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
