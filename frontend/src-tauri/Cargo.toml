@@ -161,6 +161,10 @@ ringbuf = "0.4.8"
 tempfile = "3.3.0"
 whatlang = "0.16.4"
 
+# DOCX export (pure Rust). default-features = false drops the `image` feature;
+# our exports embed no images, so the heavy image stack stays out of the build.
+docx-rs = { version = "=0.4.22", default-features = false }
+
 ffmpeg-sidecar = { git = "https://github.com/nathanbabcock/ffmpeg-sidecar", branch = "main" }
 
 sqlx = { version = "0.8", features = [ "runtime-tokio", "sqlite", "chrono"] }

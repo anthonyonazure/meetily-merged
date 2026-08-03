@@ -1,11 +1,23 @@
-//! Export meetings to Markdown files.
+//! Export meetings to Markdown, DOCX, or print-ready HTML (the PDF path).
 //!
 //! Transcripts and summaries live in SQLite, which is right for the app's access
 //! patterns (per-meeting queries, search, in-place summary updates) but useless if you
 //! want your notes in a folder, in Git, or synced to iCloud. Exporting sidesteps that:
 //! the database stays the source of truth, and the files are a plain-text copy you own.
+//!
+//! Formats:
+//! - Markdown: the original export, unchanged.
+//! - DOCX: native Word documents via the pure-Rust `docx-rs` crate.
+//! - PDF: print-styled standalone HTML opened in the browser for
+//!   print-to-PDF. See `html.rs` for why this beat `genpdf`/`printpdf`
+//!   (Unicode fidelity; no bundled fonts).
+
+pub mod docx;
+pub mod html;
+pub mod markdown_ast;
 
 use serde::Serialize;
+use std::path::Path;
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
@@ -19,6 +31,33 @@ pub struct ExportResult {
     pub exported: usize,
     /// Meetings that produced no file (no transcript and no summary).
     pub skipped: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExportFormat {
+    Markdown,
+    Docx,
+    /// Print-styled HTML, opened for browser print-to-PDF.
+    HtmlPrint,
+}
+
+impl ExportFormat {
+    fn parse(format: &str) -> Result<Self, String> {
+        match format.to_lowercase().as_str() {
+            "markdown" | "md" => Ok(Self::Markdown),
+            "docx" => Ok(Self::Docx),
+            "pdf" | "html" => Ok(Self::HtmlPrint),
+            other => Err(format!("Unsupported export format: {}", other)),
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Markdown => "md",
+            Self::Docx => "docx",
+            Self::HtmlPrint => "html",
+        }
+    }
 }
 
 const HEADING_DATE: &str = "Date";
@@ -96,14 +135,55 @@ fn build_markdown(
     out
 }
 
-/// Export meetings as Markdown. `meeting_ids = None` exports everything.
-///
-/// Prompts for a destination folder; a cancelled picker is reported as the literal
-/// error string "cancelled" so the UI can stay quiet about it.
+/// Opens a file or folder with the platform's default handler (Finder /
+/// Explorer / browser). Used after an HTML-print export so the user lands one
+/// keystroke away from "Save as PDF". Failures are logged, never fatal.
+fn open_with_default_app(path: &Path) {
+    let path_str = path.to_string_lossy().to_string();
+    let result = if cfg!(target_os = "windows") {
+        std::process::Command::new("explorer").arg(&path_str).spawn()
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(&path_str).spawn()
+    } else {
+        std::process::Command::new("xdg-open").arg(&path_str).spawn()
+    };
+    if let Err(e) = result {
+        log::warn!("Failed to open {} with default app: {}", path_str, e);
+    }
+}
+
+/// Export meetings as Markdown. Kept as its own command for backward
+/// compatibility; delegates to the format-aware export.
 #[tauri::command]
 pub async fn export_meetings_markdown<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
+    meeting_ids: Option<Vec<String>>,
+) -> Result<ExportResult, String> {
+    run_export(app, state, ExportFormat::Markdown, meeting_ids).await
+}
+
+/// Export meetings in the requested format: "markdown", "docx", or "pdf"
+/// (print-styled HTML that the browser saves as PDF). `meeting_ids = None`
+/// exports everything.
+#[tauri::command]
+pub async fn export_meetings<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    format: String,
+    meeting_ids: Option<Vec<String>>,
+) -> Result<ExportResult, String> {
+    let format = ExportFormat::parse(&format)?;
+    run_export(app, state, format, meeting_ids).await
+}
+
+/// Shared export flow. Prompts for a destination folder; a cancelled picker is
+/// reported as the literal error string "cancelled" so the UI can stay quiet
+/// about it.
+async fn run_export<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    format: ExportFormat,
     meeting_ids: Option<Vec<String>>,
 ) -> Result<ExportResult, String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -135,6 +215,7 @@ pub async fn export_meetings_markdown<R: Runtime>(
 
     let mut exported = 0usize;
     let mut skipped = 0usize;
+    let mut written_paths: Vec<std::path::PathBuf> = Vec::new();
 
     for id in ids {
         let details = match MeetingsRepository::get_meeting(pool, &id).await {
@@ -170,25 +251,50 @@ pub async fn export_meetings_markdown<R: Runtime>(
 
         let created_date = details.created_at.split('T').next().unwrap_or("").to_string();
         let filename = format!(
-            "{}_{}.md",
+            "{}_{}.{}",
             if created_date.is_empty() {
                 "undated".to_string()
             } else {
                 created_date
             },
-            safe_filename(&details.title)
+            safe_filename(&details.title),
+            format.extension()
         );
-
-        let markdown = build_markdown(
-            &details.title,
-            &details.created_at,
-            summary.as_deref(),
-            &transcripts,
-        );
-
         let path = folder.join(&filename);
-        match std::fs::write(&path, markdown) {
-            Ok(()) => exported += 1,
+
+        let write_result: Result<(), String> = match format {
+            ExportFormat::Markdown => {
+                let markdown = build_markdown(
+                    &details.title,
+                    &details.created_at,
+                    summary.as_deref(),
+                    &transcripts,
+                );
+                std::fs::write(&path, markdown).map_err(|e| e.to_string())
+            }
+            ExportFormat::Docx => docx::write_meeting_docx(
+                &path,
+                &details.title,
+                &details.created_at,
+                summary.as_deref(),
+                &transcripts,
+            ),
+            ExportFormat::HtmlPrint => {
+                let html = html::build_meeting_html(
+                    &details.title,
+                    &details.created_at,
+                    summary.as_deref(),
+                    &transcripts,
+                );
+                std::fs::write(&path, html).map_err(|e| e.to_string())
+            }
+        };
+
+        match write_result {
+            Ok(()) => {
+                exported += 1;
+                written_paths.push(path);
+            }
             Err(e) => {
                 log::error!("Failed to write {}: {}", path.display(), e);
                 skipped += 1;
@@ -196,10 +302,21 @@ pub async fn export_meetings_markdown<R: Runtime>(
         }
     }
 
+    // For the PDF path, put the user one step from "Save as PDF": open the
+    // single exported page directly, or the folder when there are several.
+    if format == ExportFormat::HtmlPrint && exported > 0 {
+        if exported == 1 {
+            open_with_default_app(&written_paths[0]);
+        } else {
+            open_with_default_app(&folder);
+        }
+    }
+
     log::info!(
-        "Exported {} meeting(s) to {} ({} skipped)",
+        "Exported {} meeting(s) to {} as {:?} ({} skipped)",
         exported,
         folder.display(),
+        format,
         skipped
     );
 
@@ -258,5 +375,16 @@ mod tests {
     fn a_meeting_without_a_summary_says_so_rather_than_leaving_a_hole() {
         let md = build_markdown("Standup", "2026-07-12T10:00:00Z", None, &[]);
         assert!(md.contains("_No summary generated._"));
+    }
+
+    #[test]
+    fn export_formats_parse_and_map_to_extensions() {
+        assert_eq!(ExportFormat::parse("markdown").unwrap(), ExportFormat::Markdown);
+        assert_eq!(ExportFormat::parse("DOCX").unwrap(), ExportFormat::Docx);
+        assert_eq!(ExportFormat::parse("pdf").unwrap(), ExportFormat::HtmlPrint);
+        assert_eq!(ExportFormat::parse("html").unwrap(), ExportFormat::HtmlPrint);
+        assert!(ExportFormat::parse("odt").is_err());
+        assert_eq!(ExportFormat::Docx.extension(), "docx");
+        assert_eq!(ExportFormat::HtmlPrint.extension(), "html");
     }
 }

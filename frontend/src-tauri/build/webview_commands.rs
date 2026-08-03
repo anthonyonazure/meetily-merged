@@ -94,6 +94,7 @@ pub const WEBVIEW_COMMANDS: &[&str] = &[
     "dictation_start_manual",
     "dictation_stop_manual",
     "dismiss_detected_meeting",
+    "export_meetings",
     "export_meetings_markdown",
     "get_active_audio_output",
     "get_anthropic_models",

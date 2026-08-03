@@ -16,17 +16,19 @@ export function PreferenceSettings() {
 
   const [showRecordingReminder, setShowRecordingReminder] = useState<boolean | null>(null);
   const [detectByRunningApps, setDetectByRunningApps] = useState<boolean>(false);
-  const [exporting, setExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null);
 
-  const handleExportMarkdown = async () => {
-    setExporting(true);
+  const handleExport = async (format: 'markdown' | 'docx' | 'pdf', label: string) => {
+    setExportingFormat(format);
     try {
       const result = await invoke<{ folder: string; exported: number; skipped: number }>(
-        'export_meetings_markdown',
-        { meetingIds: null }
+        'export_meetings',
+        { format, meetingIds: null }
       );
-      toast.success(`Exported ${result.exported} meeting${result.exported === 1 ? '' : 's'} as Markdown`, {
-        description: result.folder,
+      toast.success(`Exported ${result.exported} meeting${result.exported === 1 ? '' : 's'} as ${label}`, {
+        description: format === 'pdf'
+          ? `${result.folder} (print the opened page and choose "Save as PDF")`
+          : result.folder,
       });
     } catch (error) {
       // The Rust side reports a cancelled folder picker as "cancelled"; that is a user
@@ -35,7 +37,7 @@ export function PreferenceSettings() {
       console.error('Export failed:', error);
       toast.error('Export failed', { description: String(error) });
     } finally {
-      setExporting(false);
+      setExportingFormat(null);
     }
   };
 
@@ -228,17 +230,36 @@ export function PreferenceSettings() {
       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Export Meetings</h3>
         <p className="text-sm text-gray-600 mb-4">
-          Save every meeting as a Markdown file (summary plus timestamped transcript) to a folder you choose. The database stays the source of truth.
+          Save every meeting (summary plus timestamped transcript) to a folder you choose. The database stays the source of truth.
+          PDF export writes a print-ready page and opens it so you can save it as a PDF from the print dialog.
         </p>
 
-        <button
-          onClick={handleExportMarkdown}
-          disabled={exporting}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Download className="w-4 h-4" />
-          {exporting ? 'Exporting…' : 'Export as Markdown'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => handleExport('markdown', 'Markdown')}
+            disabled={exportingFormat !== null}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="w-4 h-4" />
+            {exportingFormat === 'markdown' ? 'Exporting…' : 'Markdown'}
+          </button>
+          <button
+            onClick={() => handleExport('docx', 'Word (DOCX)')}
+            disabled={exportingFormat !== null}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="w-4 h-4" />
+            {exportingFormat === 'docx' ? 'Exporting…' : 'Word (DOCX)'}
+          </button>
+          <button
+            onClick={() => handleExport('pdf', 'PDF (print)')}
+            disabled={exportingFormat !== null}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="w-4 h-4" />
+            {exportingFormat === 'pdf' ? 'Exporting…' : 'PDF (via print)'}
+          </button>
+        </div>
       </div>
 
     </div>

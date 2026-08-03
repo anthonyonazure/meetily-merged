@@ -863,6 +863,7 @@ pub fn run() {
             database::commands::get_database_directory,
             database::commands::open_database_folder,
             export::export_meetings_markdown,
+            export::export_meetings,
             whisper_engine::commands::open_models_folder,
             // Dictation (push-to-talk) commands. NOTE: the upstream debug commands
             // dictation_get_debug_state / dictation_clear_debug_events (keystroke
