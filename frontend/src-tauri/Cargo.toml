@@ -105,6 +105,14 @@ silero_rs = { git = "https://github.com/emotechlab/silero-rs", rev = "26a6460", 
 ort = { version = "2.0.0-rc.10" }  # ONNX Runtime for Parakeet models
 thiserror = "2.0.16"                # Error handling for Parakeet
 
+# Speaker diarization (post-processing) via sherpa-onnx OfflineSpeakerDiarization.
+# `shared` feature links the prebuilt shared C library to avoid MT/MD CRT
+# conflicts with whisper-rs on Windows (same reasoning as the mimi202605 fork).
+sherpa-onnx = { version = "1.13.3", default-features = false, features = ["shared"] }
+sha2 = "0.10"    # SHA256 verification of downloaded diarization models
+bzip2 = "0.4"    # .tar.bz2 decompression for the pyannote segmentation model
+tar = "0.4"      # archive extraction for the pyannote segmentation model
+
 # Async
 tokio = { version = "1.32.0", features = ["full", "tracing"] }
 tokio-util = "0.7"  # Utilities for tokio including CancellationToken
