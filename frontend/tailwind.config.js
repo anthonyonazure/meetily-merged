@@ -11,9 +11,25 @@ module.exports = {
   		fontFamily: {
   			sans: [
   				'var(--font-source-sans-3)'
+  			],
+  			display: [
+  				'var(--font-display)'
   			]
   		},
   		colors: {
+  			// "Ledger" semantic tokens (R G B triplet CSS vars)
+  			app: 'rgb(var(--app-bg) / <alpha-value>)',
+  			surface: 'rgb(var(--surface) / <alpha-value>)',
+  			wash: 'rgb(var(--wash) / <alpha-value>)',
+  			active: 'rgb(var(--active) / <alpha-value>)',
+  			edge: 'rgb(var(--edge) / <alpha-value>)',
+  			ink: {
+  				DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+  				bright: 'rgb(var(--ink-bright) / <alpha-value>)'
+  			},
+  			'muted-ink': 'rgb(var(--muted-ink) / <alpha-value>)',
+  			faint: 'rgb(var(--faint) / <alpha-value>)',
+  			rec: 'rgb(var(--accent-rec) / <alpha-value>)',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			border: 'hsl(var(--border))',

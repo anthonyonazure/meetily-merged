@@ -77,26 +77,60 @@
 }
 
 @layer base {
+  /* ============================================================
+     "Ledger" theme tokens
+     Semantic tokens are raw R G B triplets so Tailwind opacity
+     modifiers (e.g. bg-surface/80) keep working. Use as
+     rgb(var(--token)) in plain CSS.
+     ============================================================ */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    /* Ledger — light (paper) */
+    --app-bg: 251 250 247;      /* #fbfaf7 app ground */
+    --surface: 255 255 255;     /* #ffffff panels */
+    --wash: 244 242 236;        /* #f4f2ec sidebar / soft fills */
+    --active: 237 234 223;      /* #edeadf selected card */
+    --edge: 230 226 216;        /* #e6e2d8 borders */
+    --ink: 35 37 43;            /* #23252b primary text */
+    --ink-bright: 26 28 33;     /* #1a1c21 emphasized text */
+    --muted-ink: 92 95 102;     /* #5c5f66 secondary text */
+    --faint: 160 154 140;       /* #a09a8c tertiary text */
+    --accent-rec: 163 59 54;    /* #a33b36 recording indicator */
+    --status-bg: 35 37 43;      /* status chips: ink on paper */
+    --status-fg: 251 250 247;
+
+    /* Speaker chips (bg / fg). Slots 4-7 are hue-shifted variants
+       of the base four; diarized speakers cycle through them. */
+    --chip-you-bg: 238 233 220; --chip-you-fg: 76 70 54;    /* #eee9dc / #4c4636 */
+    --chip-s1-bg: 234 223 208;  --chip-s1-fg: 122 75 31;    /* #eadfd0 / #7a4b1f */
+    --chip-s2-bg: 219 231 218;  --chip-s2-fg: 47 93 58;     /* #dbe7da / #2f5d3a */
+    --chip-s3-bg: 218 227 238;  --chip-s3-fg: 45 79 119;    /* #dae3ee / #2d4f77 */
+    --chip-s4-bg: 231 220 232;  --chip-s4-fg: 106 63 112;   /* plum   */
+    --chip-s5-bg: 216 231 228;  --chip-s5-fg: 44 92 85;     /* teal   */
+    --chip-s6-bg: 222 220 238;  --chip-s6-fg: 69 63 138;    /* indigo */
+    --chip-s7-bg: 238 220 221;  --chip-s7-fg: 122 59 68;    /* rose   */
+
+    --font-display: Georgia, 'Times New Roman', Times, serif;
+
+    /* shadcn/ui variables remapped onto Ledger (HSL triplets) */
+    --background: 45 33% 98%;
+    --foreground: 225 10% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 225 10% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --popover-foreground: 225 10% 15%;
+    --primary: 225 10% 15%;
+    --primary-foreground: 45 33% 98%;
+    --secondary: 45 27% 94%;
+    --secondary-foreground: 225 10% 15%;
+    --muted: 45 27% 94%;
+    --muted-foreground: 222 5% 38%;
+    --accent: 45 27% 94%;
+    --accent-foreground: 225 10% 15%;
+    --destructive: 3 50% 43%;
+    --destructive-foreground: 45 33% 98%;
+    --border: 43 22% 87%;
+    --input: 43 22% 87%;
+    --ring: 225 10% 15%;
     --radius: 0.5rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -106,31 +140,107 @@
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    /* Ledger, after hours — warm ink-and-parchment */
+    --app-bg: 27 25 22;         /* #1b1916 */
+    --surface: 33 31 27;        /* #211f1b */
+    --wash: 38 36 32;           /* #262420 soft fills */
+    --active: 42 39 34;         /* #2a2722 selected card */
+    --edge: 53 50 43;           /* #35322b */
+    --ink: 221 214 200;         /* #ddd6c8 cream */
+    --ink-bright: 239 233 218;  /* #efe9da */
+    --muted-ink: 164 156 138;   /* #a49c8a */
+    --faint: 110 103 90;        /* #6e675a */
+    --accent-rec: 217 138 128;  /* #d98a80 */
+    --status-bg: 221 214 200;   /* inverted: cream on ink */
+    --status-fg: 27 25 22;
+
+    --chip-you-bg: 55 52 44;  --chip-you-fg: 216 208 186;  /* #37342c / #d8d0ba */
+    --chip-s1-bg: 61 50 38;   --chip-s1-fg: 224 176 120;   /* #3d3226 / #e0b078 */
+    --chip-s2-bg: 43 58 45;   --chip-s2-fg: 159 207 154;   /* #2b3a2d / #9fcf9a */
+    --chip-s3-bg: 42 53 66;   --chip-s3-fg: 148 188 230;   /* #2a3542 / #94bce6 */
+    --chip-s4-bg: 56 44 58;   --chip-s4-fg: 207 154 208;   /* plum   */
+    --chip-s5-bg: 38 58 55;   --chip-s5-fg: 143 207 196;   /* teal   */
+    --chip-s6-bg: 46 44 66;   --chip-s6-fg: 169 163 230;   /* indigo */
+    --chip-s7-bg: 58 44 46;   --chip-s7-fg: 217 154 162;   /* rose   */
+
+    --background: 36 10% 10%;
+    --foreground: 40 24% 83%;
+    --card: 40 10% 12%;
+    --card-foreground: 40 24% 83%;
+    --popover: 40 10% 12%;
+    --popover-foreground: 40 24% 83%;
+    --primary: 40 24% 83%;
+    --primary-foreground: 36 10% 10%;
+    --secondary: 40 9% 14%;
+    --secondary-foreground: 40 24% 83%;
+    --muted: 40 9% 14%;
+    --muted-foreground: 42 13% 59%;
+    --accent: 40 9% 14%;
+    --accent-foreground: 40 24% 83%;
+    --destructive: 7 54% 68%;
+    --destructive-foreground: 36 10% 10%;
+    --border: 42 10% 19%;
+    --input: 42 10% 19%;
+    --ring: 40 24% 83%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+}
+
+@layer components {
+  /* Serif display treatment for headings and meeting titles */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  /* Panel section headers: serif, normal case, ink underline */
+  .section-header {
+    font-family: var(--font-display);
+    text-transform: none;
+    letter-spacing: normal;
+    color: rgb(var(--ink));
+    border-bottom: 2px solid rgb(var(--ink));
+    padding-bottom: 0.25rem;
+  }
+
+  /* Status chips: ink on paper (inverted after hours) */
+  .status-chip {
+    background-color: rgb(var(--status-bg));
+    color: rgb(var(--status-fg));
+    border-radius: 3px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  /* Speaker label chips: soft highlight, rounded 3px */
+  .speaker-chip {
+    display: inline-block;
+    border-radius: 3px;
+    padding: 0.0625rem 0.375rem;
+    font-weight: 600;
+  }
+  .speaker-chip--you { background-color: rgb(var(--chip-you-bg)); color: rgb(var(--chip-you-fg)); }
+  .speaker-chip--s1 { background-color: rgb(var(--chip-s1-bg)); color: rgb(var(--chip-s1-fg)); }
+  .speaker-chip--s2 { background-color: rgb(var(--chip-s2-bg)); color: rgb(var(--chip-s2-fg)); }
+  .speaker-chip--s3 { background-color: rgb(var(--chip-s3-bg)); color: rgb(var(--chip-s3-fg)); }
+  .speaker-chip--s4 { background-color: rgb(var(--chip-s4-bg)); color: rgb(var(--chip-s4-fg)); }
+  .speaker-chip--s5 { background-color: rgb(var(--chip-s5-bg)); color: rgb(var(--chip-s5-fg)); }
+  .speaker-chip--s6 { background-color: rgb(var(--chip-s6-bg)); color: rgb(var(--chip-s6-fg)); }
+  .speaker-chip--s7 { background-color: rgb(var(--chip-s7-bg)); color: rgb(var(--chip-s7-fg)); }
+
+  /* Companion left-rule colors for transcript segments */
+  .speaker-border--you { border-left-color: rgb(var(--chip-you-fg)); }
+  .speaker-border--s1 { border-left-color: rgb(var(--chip-s1-fg)); }
+  .speaker-border--s2 { border-left-color: rgb(var(--chip-s2-fg)); }
+  .speaker-border--s3 { border-left-color: rgb(var(--chip-s3-fg)); }
+  .speaker-border--s4 { border-left-color: rgb(var(--chip-s4-fg)); }
+  .speaker-border--s5 { border-left-color: rgb(var(--chip-s5-fg)); }
+  .speaker-border--s6 { border-left-color: rgb(var(--chip-s6-fg)); }
+  .speaker-border--s7 { border-left-color: rgb(var(--chip-s7-fg)); }
 }
 
 @layer base {
@@ -166,18 +276,18 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #d1d5db;
+    background: rgb(var(--edge));
     border-radius: 3px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: rgb(var(--faint));
   }
 
   /* Firefox scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #d1d5db transparent;
+    scrollbar-color: rgb(var(--edge)) transparent;
   }
 
   /* BlockNote Editor - Override fixed dimensions for responsive layout */
