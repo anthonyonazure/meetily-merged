@@ -101,14 +101,15 @@ jobs:
           workspaces: ". -> target"
           key: macos-latest-aarch64-apple-darwin
 
-      # rust-cache restores sherpa-onnx-sys as "fresh" but prunes its
-      # downloaded prebuilt libs from target/, leaving the linker pointing at
-      # a missing directory. Force the build script to rerun in that case.
-      - name: Rebuild sherpa-onnx-sys if prebuilt libs were pruned from cache
+      # rust-cache restores sherpa-onnx-sys and ort-sys as "fresh" but their
+      # downloaded native libs (target/sherpa-onnx-prebuilt, ~/Library/Caches/
+      # ort.pyke.io) are pruned from the cache, leaving the linker pointing at
+      # missing directories. `cargo clean -p` does not reach the cross-target
+      # dirs, so prune their build/fingerprint dirs directly every run to force
+      # the download scripts to rerun.
+      - name: Force sherpa-onnx-sys and ort-sys build scripts to rerun
         run: |
-          if [ ! -d target/sherpa-onnx-prebuilt ]; then
-            cargo clean -p sherpa-onnx-sys 2>/dev/null || true
-          fi
+          find target \( -type d \( -name 'sherpa-onnx-sys-*' -o -name 'ort-sys-*' \) \) -prune -exec rm -rf {} + 2>/dev/null || true
 
       - name: Install frontend dependencies
         run: |
