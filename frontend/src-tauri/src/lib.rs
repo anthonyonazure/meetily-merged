@@ -160,6 +160,7 @@ pub mod config;
 pub mod console_utils;
 pub mod database;
 pub mod detection;
+pub mod dictation;
 pub mod notifications;
 pub mod ollama;
 pub mod onboarding;
@@ -501,6 +502,11 @@ pub fn run() {
             // Initialize system tray
             if let Err(e) = tray::create_tray(_app.handle()) {
                 log::error!("Failed to create system tray: {}", e);
+            }
+
+            // Start global dictation hotkey listener (macOS event tap)
+            if let Err(e) = dictation::start_global_hotkey_listener(&_app.handle()) {
+                log::warn!("Failed to start dictation hotkey listener: {}", e);
             }
 
             // Initialize notification system with proper defaults
@@ -851,6 +857,20 @@ pub fn run() {
             database::commands::open_database_folder,
             export::export_meetings_markdown,
             whisper_engine::commands::open_models_folder,
+            // Dictation (push-to-talk) commands. NOTE: the upstream debug commands
+            // dictation_get_debug_state / dictation_clear_debug_events (keystroke
+            // buffer) were stripped per security audit and must not come back.
+            dictation::dictation_start_manual,
+            dictation::dictation_stop_manual,
+            dictation::dictation_get_last_transcript,
+            dictation::dictation_paste_last_transcript,
+            dictation::dictation_get_hotkey,
+            dictation::dictation_set_hotkey,
+            dictation::dictation_restart_listener,
+            dictation::dictation_check_accessibility,
+            dictation::dictation_request_accessibility,
+            dictation::dictation_check_input_monitoring,
+            dictation::dictation_request_input_monitoring,
             // Onboarding commands
             onboarding::get_onboarding_status,
             onboarding::save_onboarding_status_cmd,
@@ -880,6 +900,9 @@ pub fn run() {
                 }
                 tauri::RunEvent::Exit => {
                     log::info!("Application exiting, cleaning up resources...");
+
+                    // Stop global dictation hotkey listener (joins the event tap thread)
+                    dictation::stop_global_hotkey_listener();
 
                     // Signal the detection poll task to exit before tauri
                     // starts dropping AppHandle / state.

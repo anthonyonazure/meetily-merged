@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Switch } from '@/components/ui/switch';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Keyboard, RotateCcw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { DeviceSelection, SelectedDevices } from '@/components/DeviceSelection';
+import { Button } from '@/components/ui/button';
 
 import { toast } from 'sonner';
 
@@ -30,6 +31,87 @@ interface RecordingSettingsProps {
   onSave?: (preferences: RecordingPreferences) => void;
 }
 
+interface DictationPermissionState {
+  accessibility_granted: boolean;
+  input_monitoring_granted: boolean;
+}
+
+const DEFAULT_DICTATION_HOTKEY = 'fn+space';
+const DICTATION_HOTKEY_STORE_KEY = 'dictation_hotkey';
+const MODIFIER_KEYS = new Set([
+  'Shift',
+  'Control',
+  'Alt',
+  'Meta',
+  'Fn',
+  'Function',
+  'OS',
+  'Super',
+  'Hyper',
+  'CapsLock',
+]);
+
+function normalizeHotkeyKey(key: string): string | null {
+  if (!key) return null;
+  if (key === ' ') return 'space';
+  if (key === 'Spacebar') return 'space';
+  if (key === 'Enter' || key === 'Return') return 'enter';
+  if (key === 'Tab') return 'tab';
+  if (key === 'Escape' || key === 'Esc') return 'esc';
+  if (/^F([1-9]|1[0-9]|20)$/i.test(key)) return key.toLowerCase();
+
+  if (key.length === 1) {
+    return key.toLowerCase();
+  }
+
+  return null;
+}
+
+function buildHotkeyFromKeyboardEvent(event: KeyboardEvent): string | null {
+  const modifiers: string[] = [];
+
+  // Safari/WebKit may expose Fn through getModifierState('Fn')
+  const hasFn =
+    event.getModifierState?.('Fn') ||
+    event.getModifierState?.('Function') ||
+    event.getModifierState?.('fn');
+
+  if (hasFn) modifiers.push('fn');
+  if (event.ctrlKey) modifiers.push('ctrl');
+  if (event.metaKey) modifiers.push('cmd');
+  if (event.altKey) modifiers.push('option');
+  if (event.shiftKey) modifiers.push('shift');
+
+  if (MODIFIER_KEYS.has(event.key)) {
+    return null;
+  }
+
+  const key = normalizeHotkeyKey(event.key);
+  if (!key) {
+    return null;
+  }
+
+  if (modifiers.length === 0) {
+    return null;
+  }
+
+  return [...modifiers, key].join('+');
+}
+
+function getFallbackFnHotkey(event: KeyboardEvent): string | null {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+    return null;
+  }
+  if (MODIFIER_KEYS.has(event.key)) {
+    return null;
+  }
+  const key = normalizeHotkeyKey(event.key);
+  if (!key) {
+    return null;
+  }
+  return `fn+${key}`;
+}
+
 export function RecordingSettings({ onSave }: RecordingSettingsProps) {
   const [preferences, setPreferences] = useState<RecordingPreferences>({
     save_folder: '',
@@ -42,6 +124,14 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showRecordingNotification, setShowRecordingNotification] = useState(true);
+  const [dictationHotkey, setDictationHotkey] = useState(DEFAULT_DICTATION_HOTKEY);
+  const [isSavingDictationHotkey, setIsSavingDictationHotkey] = useState(false);
+  const [isCapturingDictationHotkey, setIsCapturingDictationHotkey] = useState(false);
+  const [captureHint, setCaptureHint] = useState<string | null>(null);
+  const [isMacOS, setIsMacOS] = useState<boolean | null>(null);
+  const [dictationPermissionState, setDictationPermissionState] = useState<DictationPermissionState | null>(null);
+  const [isCheckingDictationPermissions, setIsCheckingDictationPermissions] = useState(false);
+  const captureBoxRef = useRef<HTMLDivElement | null>(null);
 
   // Load recording preferences on component mount
   useEffect(() => {
@@ -80,6 +170,139 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     };
     loadNotificationPref();
   }, []);
+
+  // Load dictation hotkey preference and sync with backend listener
+  useEffect(() => {
+    const loadDictationHotkey = async () => {
+      try {
+        const backendHotkey = await invoke<string>('dictation_get_hotkey');
+        let resolvedHotkey = backendHotkey || DEFAULT_DICTATION_HOTKEY;
+
+        const { Store } = await import('@tauri-apps/plugin-store');
+        const store = await Store.load('preferences.json');
+        const savedHotkey = await store.get<string>(DICTATION_HOTKEY_STORE_KEY);
+
+        if (savedHotkey && savedHotkey.trim() && savedHotkey !== backendHotkey) {
+          try {
+            const result = await invoke<{ hotkey: string }>('dictation_set_hotkey', {
+              hotkey: savedHotkey
+            });
+            resolvedHotkey = result.hotkey;
+          } catch (syncError) {
+            console.warn('Failed to sync saved dictation hotkey, using backend default:', syncError);
+          }
+        }
+
+        setDictationHotkey(resolvedHotkey);
+      } catch (error) {
+        console.error('Failed to load dictation hotkey:', error);
+      }
+    };
+
+    loadDictationHotkey();
+  }, []);
+
+  const detectIsMacOS = async (): Promise<boolean> => {
+    try {
+      const { platform } = await import('@tauri-apps/plugin-os');
+      const mac = platform() === 'macos';
+      setIsMacOS(mac);
+      return mac;
+    } catch (error) {
+      console.error('Failed to detect platform:', error);
+      setIsMacOS(false);
+      return false;
+    }
+  };
+
+  const loadDictationPermissionState = async (): Promise<DictationPermissionState | null> => {
+    if (isMacOS !== true) {
+      setDictationPermissionState(null);
+      return null;
+    }
+
+    setIsCheckingDictationPermissions(true);
+    try {
+      const [accessibility_granted, input_monitoring_granted] = await Promise.all([
+        invoke<boolean>('dictation_check_accessibility'),
+        invoke<boolean>('dictation_check_input_monitoring')
+      ]);
+      const state = { accessibility_granted, input_monitoring_granted };
+      setDictationPermissionState(state);
+      return state;
+    } catch (error) {
+      console.error('Failed to check dictation permissions:', error);
+      return null;
+    } finally {
+      setIsCheckingDictationPermissions(false);
+    }
+  };
+
+  const requestAccessibilityPermission = async () => {
+    try {
+      const granted = await invoke<boolean>('dictation_request_accessibility');
+      if (granted) {
+        toast.success('Accessibility permission granted');
+        await invoke<string>('dictation_restart_listener');
+      } else {
+        toast.error('Accessibility permission is required for dictation hotkey');
+      }
+      await loadDictationPermissionState();
+    } catch (error) {
+      console.error('Failed to request accessibility permission:', error);
+      toast.error('Failed to request Accessibility permission');
+    }
+  };
+
+  useEffect(() => {
+    detectIsMacOS();
+  }, []);
+
+  useEffect(() => {
+    if (isMacOS) {
+      loadDictationPermissionState();
+    }
+  }, [isMacOS]);
+
+  const requestInputMonitoringPermission = async () => {
+    try {
+      const granted = await invoke<boolean>('dictation_request_input_monitoring');
+      if (granted) {
+        toast.success('Input Monitoring permission granted');
+        await invoke<string>('dictation_restart_listener');
+      } else {
+        toast.error('Input Monitoring permission is required for dictation hotkey');
+      }
+      await loadDictationPermissionState();
+    } catch (error) {
+      console.error('Failed to request Input Monitoring permission:', error);
+      toast.error('Failed to request Input Monitoring permission');
+    }
+  };
+
+  const ensureDictationPermissions = async (): Promise<boolean> => {
+    const macOS = isMacOS === null ? await detectIsMacOS() : isMacOS;
+    if (!macOS) {
+      return true;
+    }
+
+    const state = await loadDictationPermissionState();
+    if (!state) {
+      return false;
+    }
+
+    if (!state.accessibility_granted) {
+      await requestAccessibilityPermission();
+      return false;
+    }
+
+    if (!state.input_monitoring_granted) {
+      await requestInputMonitoringPermission();
+      return false;
+    }
+
+    return true;
+  };
 
   const handleAutoSaveToggle = async (enabled: boolean) => {
     const newPreferences = { ...preferences, auto_save: enabled };
@@ -133,6 +356,106 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     }
   };
 
+  const persistDictationHotkey = async (hotkey: string) => {
+    const { Store } = await import('@tauri-apps/plugin-store');
+    const store = await Store.load('preferences.json');
+    await store.set(DICTATION_HOTKEY_STORE_KEY, hotkey);
+    await store.save();
+  };
+
+  const handleSaveDictationHotkey = async (hotkeyInput?: string) => {
+    const hotkeyToSave = (hotkeyInput ?? dictationHotkey).trim();
+    if (!hotkeyToSave) {
+      toast.error('Hotkey cannot be empty');
+      return;
+    }
+
+    setIsSavingDictationHotkey(true);
+    try {
+      const result = await invoke<{ hotkey: string }>('dictation_set_hotkey', {
+        hotkey: hotkeyToSave
+      });
+      setDictationHotkey(result.hotkey);
+      await persistDictationHotkey(result.hotkey);
+
+      toast.success('Dictation hotkey updated', {
+        description: `Current hotkey: ${result.hotkey}`
+      });
+    } catch (error) {
+      console.error('Failed to update dictation hotkey:', error);
+      toast.error('Failed to update dictation hotkey', {
+        description: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setIsSavingDictationHotkey(false);
+    }
+  };
+
+  const handleResetDictationHotkey = async () => {
+    setDictationHotkey(DEFAULT_DICTATION_HOTKEY);
+    await handleSaveDictationHotkey(DEFAULT_DICTATION_HOTKEY);
+  };
+
+  useEffect(() => {
+    if (isCapturingDictationHotkey) {
+      captureBoxRef.current?.focus();
+    }
+  }, [isCapturingDictationHotkey]);
+
+  const handleStartHotkeyCapture = async () => {
+    if (isSavingDictationHotkey) {
+      return;
+    }
+
+    const canCapture = await ensureDictationPermissions();
+    if (!canCapture) {
+      return;
+    }
+
+    setCaptureHint(null);
+    setIsCapturingDictationHotkey(true);
+  };
+
+  useEffect(() => {
+    if (!isCapturingDictationHotkey) {
+      return;
+    }
+
+    const onCaptureKeyDown = async (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === 'Escape') {
+        setIsCapturingDictationHotkey(false);
+        setCaptureHint(null);
+        return;
+      }
+
+      const hotkey = buildHotkeyFromKeyboardEvent(event);
+      if (hotkey) {
+        setCaptureHint(`Detected: ${hotkey}`);
+        setIsCapturingDictationHotkey(false);
+        await handleSaveDictationHotkey(hotkey);
+        return;
+      }
+
+      const fnFallback = getFallbackFnHotkey(event);
+      if (fnFallback) {
+        setCaptureHint(`Detected with Fn fallback: ${fnFallback}`);
+        setIsCapturingDictationHotkey(false);
+        await handleSaveDictationHotkey(fnFallback);
+        return;
+      }
+
+      setCaptureHint('Press at least one modifier plus a key, e.g. fn+space or cmd+shift+space');
+    };
+
+    window.addEventListener('keydown', onCaptureKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', onCaptureKeyDown, true);
+    };
+  }, [isCapturingDictationHotkey, handleSaveDictationHotkey]);
+
   const savePreferences = async (prefs: RecordingPreferences, options?: { silent?: boolean }) => {
     // `silent` saves do not flip `saving`. Disabling a control mid-drag makes the
     // browser abort the drag and drop focus, which scrolled the settings page back to
@@ -168,6 +491,12 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       </div>
     );
   }
+
+  const missingAccessibility =
+    isMacOS && dictationPermissionState && !dictationPermissionState.accessibility_granted;
+  const missingInputMonitoring =
+    isMacOS && dictationPermissionState && !dictationPermissionState.input_monitoring_granted;
+  const showDictationPermissionNotice = Boolean(missingAccessibility || missingInputMonitoring);
 
   return (
     <div className="space-y-6">
@@ -243,6 +572,109 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
           onCheckedChange={handleNotificationToggle}
         />
       </div>
+
+      {/* Push-to-talk dictation hotkey (macOS event tap) */}
+      {isMacOS !== false && (
+      <div className="p-4 border rounded-lg space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            <Keyboard className="w-4 h-4 text-gray-600" />
+          </div>
+          <div className="flex-1">
+            <div className="font-medium">Push-to-talk Dictation Hotkey</div>
+            <div className="text-sm text-gray-600">
+              Hold this hotkey to dictate into any app&apos;s text input. Example formats:
+              <span className="font-medium"> fn+space</span>,
+              <span className="font-medium"> ctrl+space</span>,
+              <span className="font-medium"> cmd+shift+space</span>.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div
+            ref={captureBoxRef}
+            tabIndex={isCapturingDictationHotkey ? 0 : -1}
+            className={`rounded-md border px-3 py-2 text-sm transition-colors outline-none ${
+              isCapturingDictationHotkey
+                ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                : 'border-gray-300 bg-gray-50'
+            }`}
+          >
+            {isCapturingDictationHotkey
+              ? 'Capturing... press your shortcut now'
+              : `Current hotkey: ${dictationHotkey}`}
+          </div>
+          {captureHint && (
+            <p className="text-xs text-gray-600">{captureHint}</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant={isCapturingDictationHotkey ? 'secondary' : 'outline'}
+            onClick={handleStartHotkeyCapture}
+            disabled={isSavingDictationHotkey}
+          >
+            <Keyboard className="w-4 h-4" />
+            {isCapturingDictationHotkey ? 'Waiting for keys...' : 'Record Shortcut'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsCapturingDictationHotkey(false)}
+            disabled={!isCapturingDictationHotkey || isSavingDictationHotkey}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleResetDictationHotkey}
+            disabled={isSavingDictationHotkey}
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </Button>
+        </div>
+
+        {showDictationPermissionNotice && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-3">
+            <p className="text-sm text-red-700">
+              Dictation hotkey needs macOS permissions before it can work.
+            </p>
+            <div className="text-xs text-red-700 space-y-1">
+              {missingAccessibility && (
+                <p>Accessibility permission is missing.</p>
+              )}
+              {missingInputMonitoring && (
+                <p>Input Monitoring permission is missing.</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {missingAccessibility && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={requestAccessibilityPermission}
+                  disabled={isCheckingDictationPermissions}
+                >
+                  Grant Accessibility
+                </Button>
+              )}
+              {missingInputMonitoring && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={requestInputMonitoringPermission}
+                  disabled={isCheckingDictationPermissions}
+                >
+                  Grant Input Monitoring
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      )}
 
       {/* Device Preferences */}
       <div className="space-y-4">

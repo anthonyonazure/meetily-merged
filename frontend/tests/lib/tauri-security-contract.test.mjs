@@ -103,7 +103,7 @@ test('the main capability grants only caller-proven core and plugin operations',
   const config = JSON.parse(configSource);
   const main = JSON.parse(capabilitySource);
   const packageJson = JSON.parse(packageSource);
-  assert.deepEqual(config.app.security.capabilities, ['main']);
+  assert.deepEqual(config.app.security.capabilities, ['main', 'dictation-widget']);
   assert.equal(main.identifier, 'main');
 
   const expectedPermissions = [
@@ -128,6 +128,34 @@ test('the main capability grants only caller-proven core and plugin operations',
   ];
   assert.deepEqual(sorted(main.permissions), sorted(expectedPermissions));
   assert.deepEqual(main.windows, ['main']);
+
+  // The dictation overlay window gets its own, strictly smaller capability:
+  // event listen/unlisten plus a single read-only command. Keystroke-debug
+  // commands were stripped from the dictation module per security audit and
+  // must never appear in any allowlist.
+  const widget = JSON.parse(
+    await readFile(new URL('src-tauri/capabilities/dictation-widget.json', frontendRoot), 'utf8'),
+  );
+  assert.equal(widget.identifier, 'dictation-widget');
+  assert.deepEqual(widget.windows, ['dictation-widget']);
+  assert.deepEqual(sorted(widget.permissions), sorted([
+    'dictation-widget-commands',
+    'core:event:allow-listen',
+    'core:event:allow-unlisten',
+  ]));
+  const widgetPermissionSource = await readFile(
+    new URL('src-tauri/permissions/dictation-widget.toml', frontendRoot), 'utf8',
+  );
+  assert.deepEqual(sorted(stringsInArray(widgetPermissionSource, 'commands.allow')),
+    ['dictation_get_hotkey']);
+
+  // Audit-mandated: the keystroke debug surface stays gone everywhere.
+  const mainPermissionSource = await readFile(
+    new URL('src-tauri/permissions/main-window.toml', frontendRoot), 'utf8',
+  );
+  for (const source of [mainPermissionSource, widgetPermissionSource]) {
+    assert.doesNotMatch(source, /dictation_get_debug_state|dictation_clear_debug_events/);
+  }
 
   assert.equal(packageJson.dependencies?.['@tauri-apps/plugin-fs'], undefined);
   assert.equal(packageJson.devDependencies?.['@tauri-apps/plugin-fs'], undefined);

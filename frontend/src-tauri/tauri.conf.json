@@ -48,7 +48,7 @@
                 "style-src": "'self' 'unsafe-inline'",
                 "media-src": "'self' blob: data:"
             },
-            "capabilities": ["main"]
+            "capabilities": ["main", "dictation-widget"]
         }
     },
     "bundle": {

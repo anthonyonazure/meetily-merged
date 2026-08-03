@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "dictation-widget-commands"
+description = """
+Commands invokable from the dictation overlay window only. The overlay is a
+read-only status display; keep this list to display-support commands.
+"""
+commands.allow = [
+  "dictation_get_hotkey",
+]

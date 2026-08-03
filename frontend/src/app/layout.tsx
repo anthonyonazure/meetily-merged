@@ -2,6 +2,7 @@
 
 import './globals.css'
 import { Source_Sans_3 } from 'next/font/google'
+import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { SidebarProvider } from '@/components/Sidebar/SidebarProvider'
 import MainContent from '@/components/MainContent'
@@ -68,6 +69,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const pathname = usePathname()
+  const isDictationWidget = pathname === '/dictation-widget'
+  const isOverlayWindow = isDictationWidget
+
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
   const [onboardingCheckDone, setOnboardingCheckDone] = useState(false)
@@ -78,6 +83,11 @@ export default function RootLayout({
   const [importFilePath, setImportFilePath] = useState<string | null>(null)
 
   useEffect(() => {
+    if (isOverlayWindow) {
+      setOnboardingCheckDone(true)
+      return
+    }
+
     let cancelled = false
 
     const checkOnboarding = async () => {
@@ -126,7 +136,28 @@ export default function RootLayout({
 
     checkOnboarding()
     return () => { cancelled = true }
-  }, [])
+  }, [isOverlayWindow])
+
+  // Sync saved dictation hotkey to backend listener at startup
+  useEffect(() => {
+    if (isOverlayWindow) return;
+
+    const syncDictationHotkey = async () => {
+      try {
+        const { Store } = await import('@tauri-apps/plugin-store');
+        const store = await Store.load('preferences.json');
+        const savedHotkey = await store.get<string>('dictation_hotkey');
+
+        if (savedHotkey && savedHotkey.trim()) {
+          await invoke('dictation_set_hotkey', { hotkey: savedHotkey });
+        }
+      } catch (error) {
+        console.error('[Layout] Failed to sync dictation hotkey:', error);
+      }
+    };
+
+    syncDictationHotkey();
+  }, [isOverlayWindow]);
 
   // Disable context menu in production
   useEffect(() => {
@@ -258,6 +289,19 @@ export default function RootLayout({
     setOnboardingCompleted(true)
     // Optionally reload the window to ensure all state is fresh
     window.location.reload()
+  }
+
+  // Overlay windows (dictation widget): render children directly without
+  // providers/sidebar on a transparent background.
+  if (isOverlayWindow) {
+    return (
+      <html lang="en" style={{ background: 'transparent' }}>
+        <body className={`${sourceSans3.variable} font-sans antialiased`} style={{ background: 'transparent' }}>
+          {children}
+          <Toaster position="bottom-right" />
+        </body>
+      </html>
+    )
   }
 
   return (
