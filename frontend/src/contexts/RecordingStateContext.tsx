@@ -3,6 +3,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { recordingService } from '@/services/recordingService';
+import {
+  getRecordingErrorMessage,
+  getRecordingShutdownUpdate,
+} from '@/lib/recording-lifecycle';
+import type { NativeRecordingShutdownProgress } from '@/lib/recording-lifecycle';
 
 /**
  * Recording state synchronized with backend
@@ -35,6 +40,7 @@ interface RecordingState {
   // NEW: Lifecycle status
   status: RecordingStatus;
   statusMessage?: string;  // Optional message for current status
+  shutdownProgress: NativeRecordingShutdownProgress | null;
 }
 
 interface RecordingStateContextType extends RecordingState {
@@ -66,6 +72,7 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
     activeDuration: null,
     status: RecordingStatus.IDLE,  // NEW: Initialize with IDLE status
     statusMessage: undefined,       // NEW: No message initially
+    shutdownProgress: null,
   });
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -83,6 +90,7 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
       ...prev,
       status,
       statusMessage: message,
+      shutdownProgress: null,
     }));
   }, [state.status, state.isRecording, state.isPaused]);
 
@@ -163,8 +171,17 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
         // listening, so the failure was invisible: the transcript simply stopped growing
         // while the user kept talking, and the rest of the meeting was lost. A dead
         // recorder is exactly the case that warrants a toast.
-        const unlistenError = await recordingService.onRecordingError((message) => {
+        const unlistenError = await recordingService.onRecordingError((payload) => {
+          const message = getRecordingErrorMessage(payload);
           console.error('[RecordingStateContext] Recording error event:', message);
+
+          setState(prev => ({
+            ...prev,
+            status: RecordingStatus.ERROR,
+            statusMessage: message,
+            shutdownProgress: null,
+          }));
+
           if (errorReportedRef.current) return;
           errorReportedRef.current = true;
 
@@ -225,6 +242,19 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
           }));
         });
         unsubscribers.push(unlistenResumed);
+
+        const unlistenShutdownProgress = await recordingService.onRecordingShutdownProgress((payload) => {
+          const update = getRecordingShutdownUpdate(payload);
+          setState(prev => ({
+            ...prev,
+            status: update.phase === 'processing'
+              ? RecordingStatus.PROCESSING_TRANSCRIPTS
+              : RecordingStatus.STOPPING,
+            statusMessage: update.message,
+            shutdownProgress: update.nativeProgress,
+          }));
+        });
+        unsubscribers.push(unlistenShutdownProgress);
 
         console.log('[RecordingStateContext] Event listeners set up successfully');
       } catch (error) {
