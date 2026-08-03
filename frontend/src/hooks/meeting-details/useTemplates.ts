@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke as invokeTauri } from '@tauri-apps/api/core';
-import { toast } from 'sonner';
 
 export function useTemplates() {
   const [availableTemplates, setAvailableTemplates] = useState<Array<{
@@ -30,10 +29,9 @@ export function useTemplates() {
 
   // Handle template selection
   const handleTemplateSelection = useCallback((templateId: string, templateName: string) => {
+    // No toast: the dropdown closes showing the newly selected template.
     setSelectedTemplate(templateId);
-    toast.success('Template selected', {
-      description: `Using "${templateName}" template for summary generation`,
-    });
+    console.log('Template selected:', templateName);
   }, []);
 
   return {

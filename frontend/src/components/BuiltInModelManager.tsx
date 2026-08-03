@@ -127,7 +127,9 @@ export function BuiltInModelManager({
           });
           // Refresh models list
           fetchModels();
-          toast.success(`Model ${model} downloaded successfully`);
+          // No toast: DownloadProgressToast listens to the same event and already
+          // shows the completion toast.
+          console.log(`Built-in model download complete: ${model}`);
         }
 
         // Handle cancelled status
@@ -210,8 +212,8 @@ export function BuiltInModelManager({
       // Check if this is a cancellation error (starts with "CANCELLED:")
       const errorMsg = String(error);
       if (errorMsg.startsWith('CANCELLED:')) {
-        // Cancel handler already removed from downloadingModels
-        // Don't show error toast for cancellations - cancel function already shows info toast
+        // Cancel handler already removed from downloadingModels; a cancellation the
+        // user asked for is not a failure worth a toast.
         return;
       }
 
@@ -232,7 +234,9 @@ export function BuiltInModelManager({
   const cancelDownload = async (modelName: string) => {
     try {
       await invoke('builtin_ai_cancel_download', { modelName });
-      toast.info(`Download of ${modelName} cancelled`);
+      // The progress bar disappears and the Download button comes back — that is the
+      // confirmation.
+      console.log(`Cancelled download: ${modelName}`);
       setDownloadingModels((prev) => {
         const newSet = new Set(prev);
         newSet.delete(modelName);
@@ -246,7 +250,8 @@ export function BuiltInModelManager({
   const deleteModel = async (modelName: string) => {
     try {
       await invoke('builtin_ai_delete_model', { modelName });
-      toast.success(`Model ${modelName} deleted`);
+      // The refreshed list shows the model back in its "Download" state.
+      console.log(`Deleted model: ${modelName}`);
       fetchModels();
     } catch (error) {
       console.error('Failed to delete model:', error);

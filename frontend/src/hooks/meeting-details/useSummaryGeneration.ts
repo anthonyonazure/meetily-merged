@@ -21,10 +21,9 @@ async function resolveSummaryLanguage(
     const perMeeting = await readMeetingSummaryLanguage(meetingId);
     if (perMeeting.language) return perMeeting.language;
   } catch (err) {
+    // Non-actionable: we fall through to the default below, so the generation still
+    // happens in a sensible language. Log it, don't toast it.
     console.warn('Failed to load meeting summary language:', err);
-    toast.warning('Could not load saved summary language', {
-      description: 'Using Auto for this generation.',
-    });
   }
 
   try {
@@ -118,11 +117,11 @@ export function useSummaryGeneration({
 
       console.log('Processing transcript with template:', selectedTemplate);
 
-      // Show toast notification for generation start
-      toast.info(`${isRegeneration ? 'Regenerating' : 'Generating'} summary...`, {
-        description: `Using ${modelConfig.provider}/${modelConfig.model}`,
-        duration: 3000,
-      });
+      // No "generating…" toast: summaryStatus drives a visible in-panel status message
+      // and the button flips to "Stop", so the toast was pure narration.
+      console.log(
+        `${isRegeneration ? 'Regenerating' : 'Generating'} summary with ${modelConfig.provider}/${modelConfig.model}`
+      );
 
       // Resolve explicit metadata override first; Auto detects the transcript language.
       const summaryLanguage = await resolveSummaryLanguage(
@@ -407,7 +406,6 @@ export function useSummaryGeneration({
     // Check if model config is still loading
     if (isModelConfigLoading) {
       console.log('⏳ Model configuration is still loading, please wait...');
-      toast.info('Loading model configuration, please wait...');
       return;
     }
 
@@ -600,15 +598,10 @@ export function useSummaryGeneration({
     // Stop polling
     stopSummaryPolling(meeting.id);
 
-    // Reset status to idle
+    // Reset status to idle. No toast: the user pressed Stop, and the button flipping
+    // back from "Stop" to "Generate" is the confirmation.
     setSummaryStatus('idle');
     setSummaryError(null);
-
-    // Show toast notification
-    toast.info('Summary generation stopped', {
-      description: 'You can generate a new summary anytime',
-      duration: 3000,
-    });
   }, [meeting.id, stopSummaryPolling]);
 
   return {

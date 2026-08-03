@@ -688,11 +688,11 @@ export function ModelSettingsModal({
   const downloadRecommendedModel = async () => {
     const recommendedModel = 'gemma3:1b';
 
-    // Prevent duplicate downloads (defense in depth - backend also checks)
+    // Prevent duplicate downloads (defense in depth - backend also checks).
+    // No toast: the button is already disabled and showing a spinner + progress bar
+    // while the download runs, so this branch has nothing new to tell the user.
     if (isDownloading(recommendedModel)) {
-      toast.info(`${recommendedModel} is already downloading`, {
-        description: `Progress: ${Math.round(getProgress(recommendedModel) || 0)}%`
-      });
+      console.log(`${recommendedModel} is already downloading`);
       return;
     }
 
@@ -741,7 +741,8 @@ export function ModelSettingsModal({
         endpoint
       });
 
-      toast.success(`Model ${modelName} deleted`);
+      // The model disappears from the refreshed list — that is the confirmation.
+      console.log(`Deleted Ollama model: ${modelName}`);
       await fetchOllamaModels(true); // Refresh list
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to delete model';

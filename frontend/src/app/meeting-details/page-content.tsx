@@ -102,7 +102,8 @@ export default function PageContent({
       const { emit } = await import('@tauri-apps/api/event');
       await emit('model-config-updated', config);
 
-      toast.success('Model settings saved successfully');
+      // No success toast: the settings dialog closes onto the new provider/model.
+      console.log('Model config saved');
     } catch (error) {
       console.error('Failed to save model config:', error);
       toast.error('Failed to save model settings');

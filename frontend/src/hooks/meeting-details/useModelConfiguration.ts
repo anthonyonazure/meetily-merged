@@ -132,7 +132,7 @@ export function useModelConfiguration({ serverAddress }: UseModelConfigurationPr
       const { emit } = await import('@tauri-apps/api/event');
       await emit('model-config-updated', payload);
 
-      toast.success("Summary settings Saved successfully");
+      // No success toast: the settings dialog closes onto the new provider/model.
     } catch (error) {
       console.error('Failed to save model config:', error);
       toast.error("Failed to save summary settings", { description: String(error) });

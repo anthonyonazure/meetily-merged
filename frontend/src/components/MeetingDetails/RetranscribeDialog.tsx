@@ -221,7 +221,8 @@ export function RetranscribeDialog({
         await invoke('cancel_retranscription_command');
         setIsProcessing(false);
         setProgress(null);
-        toast.info('Retranscription cancelled');
+        // No toast: the user pressed Cancel and the dialog closes in response.
+        console.log('Retranscription cancelled');
       } catch (err) {
         console.error('Failed to cancel retranscription:', err);
       }

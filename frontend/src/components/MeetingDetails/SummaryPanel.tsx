@@ -135,10 +135,8 @@ export function SummaryPanel({
           setSummaryLangStorage(stored.storage);
         }
       } catch (err) {
+        // Non-actionable background read: we fall back to Auto, which the picker shows.
         console.error('Failed to load summary language:', err);
-        toast.warning('Could not load saved summary language', {
-          description: 'Using Auto until meeting metadata can be read.',
-        });
         if (!cancelled && languageLoadVersionRef.current === loadVersion) setSummaryLang(null);
       }
     };
@@ -169,9 +167,10 @@ export function SummaryPanel({
             setSummaryLang(saved.language);
             setSummaryLangStorage(saved.storage);
             if (saved.storage === 'local_fallback') {
-              toast.info('Summary language saved on this device', {
-                description: 'This meeting has no recording folder, so the preference cannot be written to meeting metadata.',
-              });
+              // The choice *was* saved, just to local storage instead of meeting
+              // metadata. Nothing for the user to do, and the picker already shows
+              // the language they picked.
+              console.log('Summary language saved to local fallback storage');
             }
             if (request.language) {
               addRecent(request.language);

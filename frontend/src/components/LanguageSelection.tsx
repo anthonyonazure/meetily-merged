@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Globe } from 'lucide-react';
 
-import { toast } from 'sonner';
 import { useConfig } from '@/contexts/ConfigContext';
 
 export interface Language {
@@ -144,17 +143,11 @@ export function LanguageSelection({
       onLanguageChange(languageCode);
       console.log('Language preference saved:', languageCode);
 
-      // Show success toast
-      const selectedLang = LANGUAGES.find(lang => lang.code === languageCode);
-      const languageName = selectedLang?.name || languageCode;
-      toast.success("Language preference saved", {
-        description: `Transcription language set to ${languageName}`
-      });
+      // No toasts around this: the preference is already applied to local state above
+      // (the picker visibly shows the new language), and a background failure here is
+      // not something the user can act on.
     } catch (error) {
       console.error('Failed to save language preference:', error);
-      toast.error("Failed to save language preference", {
-        description: error instanceof Error ? error.message : String(error)
-      });
     } finally {
       setSaving(false);
     }

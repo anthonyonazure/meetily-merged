@@ -105,12 +105,10 @@ export function ModelManager({
         setModels(modelsWithDownloadState);
         setInitialized(true);
       } catch (err) {
+        // The failure is rendered inline as a red panel below; a toast on top of it
+        // would say the same thing twice.
         console.error('Failed to initialize Whisper:', err);
         setError(err instanceof Error ? err.message : 'Failed to load models');
-        toast.error('Failed to load transcription models', {
-          description: err instanceof Error ? err.message : 'Unknown error',
-          duration: 5000
-        });
       } finally {
         setLoading(false);
       }
@@ -278,9 +276,7 @@ export function ModelManager({
       // Clean up throttle data
       progressThrottleRef.current.delete(modelName);
 
-      toast.info(`${displayName} download cancelled`, {
-        duration: 3000
-      });
+      console.log(`Download cancelled: ${displayName}`);
     } catch (err) {
       console.error('Failed to cancel download:', err);
       toast.error('Failed to cancel download', {
@@ -306,10 +302,8 @@ export function ModelManager({
         )
       );
 
-      toast.info(`Downloading ${displayName}...`, {
-        description: 'This may take a few minutes',
-        duration: 5000
-      });
+      // No "downloading…" toast: the card itself grows a live progress bar.
+      console.log(`Downloading model: ${displayName}`);
 
       await WhisperAPI.downloadModel(modelName);
     } catch (err) {
@@ -340,10 +334,9 @@ export function ModelManager({
       await saveModelSelection(modelName);
     }
 
-    const displayName = getDisplayName(modelName);
-    toast.success(`Switched to ${displayName}`, {
-      duration: 3000
-    });
+    // The selected card is highlighted and the helper text below names the model —
+    // no toast needed to say what the user is already looking at.
+    console.log(`Switched to model: ${getDisplayName(modelName)}`);
   };
 
   const deleteModel = async (modelName: string) => {
@@ -356,10 +349,8 @@ export function ModelManager({
       const modelList = await WhisperAPI.getAvailableModels();
       setModels(modelList);
 
-      toast.success(`${displayName} deleted`, {
-        description: 'Model removed to free up space',
-        duration: 3000
-      });
+      // The card flips back to a "Download" state, which is the confirmation.
+      console.log(`Deleted model: ${displayName}`);
 
       // If deleted model was selected, clear selection
       if (selectedModel === modelName && onModelSelect) {

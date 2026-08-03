@@ -90,10 +90,8 @@ export function DownloadProgressStep() {
         status: 'error',
         error: error instanceof Error ? error.message : 'Retry failed',
       }));
-
-      toast.error('Download retry failed', {
-        description: 'Please check your connection and try again.',
-      });
+      // No toast: the download card renders `state.error` inline with its own Retry
+      // button, so the toast was the same message shown twice.
     } finally {
       // Allow retry again after 2 seconds
       setTimeout(() => {
@@ -138,10 +136,8 @@ export function DownloadProgressStep() {
         status: 'error',
         error: error instanceof Error ? error.message : 'Retry failed',
       }));
-
-      toast.error('Summary model download retry failed', {
-        description: 'Please check your connection and try again.',
-      });
+      // No toast: the download card renders `state.error` inline with its own Retry
+      // button, so the toast was the same message shown twice.
     } finally {
       // Allow retry again after 2 seconds
       setTimeout(() => {

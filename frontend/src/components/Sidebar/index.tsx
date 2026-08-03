@@ -402,7 +402,8 @@ const Sidebar: React.FC = () => {
         setCurrentMeeting({ id: meetingId, title: newTitle });
       }
 
-      toast.success("Meeting title updated successfully");
+      // No success toast: the new title is right there in the sidebar list.
+      console.log('Meeting title updated');
 
       // Close modal and reset state
       setEditModalState({ isOpen: false, meetingId: null, currentTitle: '' });
