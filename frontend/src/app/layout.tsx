@@ -232,6 +232,39 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {/* Frontend crash reporter, dev only.
+
+            A failure during hydration leaves no trace anywhere we can see: the Rust log
+            stays silent, and the error boundary never renders because the tree never
+            mounts. The window just sits there — icons drawn by the server HTML but no
+            handlers on them, client-only controls missing entirely.
+
+            This runs before any bundle does, so it also catches module-init failures that
+            would otherwise prevent a React-level handler from ever installing. It pings
+            the dev server, which puts the error in the terminal log. */}
+        {process.env.NODE_ENV === 'development' && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function () {
+  var report = function (kind, detail) {
+    try {
+      fetch('/__frontend_error?kind=' + encodeURIComponent(kind) +
+            '&detail=' + encodeURIComponent(String(detail).slice(0, 500)));
+    } catch (e) {}
+  };
+  window.addEventListener('error', function (e) {
+    report('error', (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    report('unhandledrejection', (r && (r.stack || r.message)) || r);
+  });
+})();`,
+            }}
+          />
+        )}
+      </head>
       <body className={`${sourceSans3.variable} font-sans antialiased`}>
         <AppErrorBoundary>
         <RecordingStateProvider>
