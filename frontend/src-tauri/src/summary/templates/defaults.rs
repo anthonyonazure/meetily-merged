@@ -12,6 +12,9 @@ pub const STANDARD_MEETING: &str = include_str!("../../../templates/standard_mee
 /// Townhall / all-hands meeting template
 pub const TOWNHALL: &str = include_str!("../../../templates/townhall.json");
 
+/// Detailed discussion notes template
+pub const DETAILED_DISCUSSION: &str = include_str!("../../../templates/detailed_discussion.json");
+
 /// Registry of all built-in templates
 ///
 /// Maps template identifiers to their embedded JSON content
@@ -20,6 +23,7 @@ pub fn get_builtin_templates() -> Vec<(&'static str, &'static str)> {
         ("daily_standup", DAILY_STANDUP),
         ("standard_meeting", STANDARD_MEETING),
         ("townhall", TOWNHALL),
+        ("detailed_discussion", DETAILED_DISCUSSION),
     ]
 }
 
@@ -35,13 +39,19 @@ pub fn get_builtin_template(id: &str) -> Option<&'static str> {
         "daily_standup" => Some(DAILY_STANDUP),
         "standard_meeting" => Some(STANDARD_MEETING),
         "townhall" => Some(TOWNHALL),
+        "detailed_discussion" => Some(DETAILED_DISCUSSION),
         _ => None,
     }
 }
 
 /// List all built-in template identifiers
 pub fn list_builtin_template_ids() -> Vec<&'static str> {
-    vec!["daily_standup", "standard_meeting", "townhall"]
+    vec![
+        "daily_standup",
+        "detailed_discussion",
+        "standard_meeting",
+        "townhall",
+    ]
 }
 
 #[cfg(test)]
@@ -66,6 +76,16 @@ mod tests {
         assert!(get_builtin_template("daily_standup").is_some());
         assert!(get_builtin_template("standard_meeting").is_some());
         assert!(get_builtin_template("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_detailed_discussion_template_registered() {
+        // Guard against drift between the four registration points in this file.
+        assert!(get_builtin_template("detailed_discussion").is_some());
+        assert!(list_builtin_template_ids().contains(&"detailed_discussion"));
+        assert!(get_builtin_templates()
+            .iter()
+            .any(|(id, _)| *id == "detailed_discussion"));
     }
 
     #[test]
