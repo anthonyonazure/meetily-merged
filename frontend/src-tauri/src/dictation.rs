@@ -485,8 +485,10 @@ fn ensure_widget_window<R: Runtime>(app: &AppHandle<R>) {
     .inner_size(DICTATION_WIDGET_WIDTH, DICTATION_WIDGET_HEIGHT)
     .position(x, 32.0)
     .resizable(false)
+    // No .transparent(true): on macOS that requires the `macos-private-api`
+    // feature, which the least-privilege hardening removed. The widget page
+    // styles its own opaque rounded container instead.
     .decorations(false)
-    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .focused(false)
