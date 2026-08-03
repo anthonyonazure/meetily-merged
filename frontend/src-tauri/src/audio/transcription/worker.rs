@@ -193,6 +193,7 @@ pub fn start_transcription_task<R: Runtime>(
             let engine_clone = match &transcription_engine {
                 TranscriptionEngine::Whisper(e) => TranscriptionEngine::Whisper(e.clone()),
                 TranscriptionEngine::Parakeet(e) => TranscriptionEngine::Parakeet(e.clone()),
+                TranscriptionEngine::QwenAsr(e) => TranscriptionEngine::QwenAsr(e.clone()),
                 TranscriptionEngine::Provider(p) => TranscriptionEngine::Provider(p.clone()),
             };
             let app_clone = app.clone();
@@ -274,6 +275,7 @@ pub fn start_transcription_task<R: Runtime>(
                                     let confidence_threshold = match &engine_clone {
                                         TranscriptionEngine::Whisper(_) | TranscriptionEngine::Provider(_) => 0.3,
                                         TranscriptionEngine::Parakeet(_) => 0.0, // Parakeet has no confidence, accept all
+                                        TranscriptionEngine::QwenAsr(_) => 0.0, // QwenASR has no confidence, accept all
                                     };
 
                                     let confidence_str = match confidence_opt {
@@ -677,6 +679,45 @@ async fn transcribe_chunk_with_provider(
                 }
             }
         }
+        TranscriptionEngine::QwenAsr(qwen_engine) => {
+            // NOTE: reduced-scope port — upstream streams token-by-token partials via a
+            // dedicated "transcript-partial" event. Our worker dispatch has no app handle
+            // and our TranscriptContext has no partial-preview channel, so we use batch
+            // transcription; final transcripts flow through the normal ordered stream.
+            match qwen_engine.transcribe_audio(speech_samples).await {
+                Ok(text) => {
+                    info!(
+                        "QwenASR raw output for chunk {}: '{}'",
+                        chunk.chunk_id, text
+                    );
+                    let cleaned_text = clean_qwen_asr_output(&text);
+                    if cleaned_text.is_empty() {
+                        info!(
+                            "QwenASR chunk {} cleaned to empty (raw was '{}'), skipping",
+                            chunk.chunk_id, text
+                        );
+                        return Ok((String::new(), None, false));
+                    }
+
+                    info!(
+                        "QwenASR transcription complete for chunk {}: '{}'",
+                        chunk.chunk_id, cleaned_text
+                    );
+
+                    // QwenASR doesn't provide confidence or partial results here
+                    Ok((cleaned_text, None, false))
+                }
+                Err(e) => {
+                    error!(
+                        "QwenASR transcription failed for chunk {}: {}",
+                        chunk.chunk_id, e
+                    );
+                    // No toast: the worker emits a FAILED_CHUNK_PLACEHOLDER
+                    // into the transcript stream when this error surfaces.
+                    Err(TranscriptionError::EngineFailed(e.to_string()))
+                }
+            }
+        }
         TranscriptionEngine::Provider(provider) => {
             // NEW: Trait-based provider (clean, unified interface)
             let language = crate::get_language_preference_internal();
@@ -718,6 +759,71 @@ async fn transcribe_chunk_with_provider(
             }
         }
     }
+}
+
+/// Remove QwenASR language-prefix artifacts.
+///
+/// Qwen3-ASR prepends a language tag directly before the transcript with NO separator:
+///   - `language EnglishWhat's your name?`
+///   - `language None Hello`
+///
+/// We match the known language names exactly to avoid eating transcript content.
+/// NOTE: intentionally duplicated in qwen_asr_provider.rs and dictation paths so
+/// those features stay independent of the worker.
+fn clean_qwen_asr_output(text: &str) -> String {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    // Known Qwen3-ASR language names (case-insensitive).
+    // These are directly concatenated to the transcript without any separator.
+    static LANGUAGE_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r"(?im)^\s*language\s+(?:",
+            r"English|Chinese|Japanese|Korean|French|German|Spanish|",
+            r"Portuguese|Russian|Italian|Dutch|Turkish|Arabic|Polish|",
+            r"Swedish|Norwegian|Danish|Finnish|Hungarian|Czech|Romanian|",
+            r"Bulgarian|Greek|Serbian|Croatian|Slovak|Slovenian|",
+            r"Ukrainian|Catalan|Vietnamese|Thai|Indonesian|Malay|",
+            r"Hindi|Tamil|Telugu|Bengali|Urdu|Persian|Hebrew|",
+            r"Cantonese|Yue|None|null",
+            r")[:：]?\s*"
+        ))
+        .expect("valid regex")
+    });
+    static LANGUAGE_SENTENCE_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r"(?i)([。！？.!?]\s*)language\s+(?:",
+            r"English|Chinese|Japanese|Korean|French|German|Spanish|",
+            r"Portuguese|Russian|Italian|Dutch|Turkish|Arabic|Polish|",
+            r"Swedish|Norwegian|Danish|Finnish|Hungarian|Czech|Romanian|",
+            r"Bulgarian|Greek|Serbian|Croatian|Slovak|Slovenian|",
+            r"Ukrainian|Catalan|Vietnamese|Thai|Indonesian|Malay|",
+            r"Hindi|Tamil|Telugu|Bengali|Urdu|Persian|Hebrew|",
+            r"Cantonese|Yue|None|null",
+            r")[:：]?\s*"
+        ))
+        .expect("valid regex")
+    });
+    static MULTISPACE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"[ \t]{2,}").expect("valid regex"));
+
+    let mut cleaned = text.trim().to_string();
+    if cleaned.is_empty() {
+        return cleaned;
+    }
+
+    cleaned = LANGUAGE_PREFIX_RE.replace_all(&cleaned, "").into_owned();
+    loop {
+        let next = LANGUAGE_SENTENCE_PREFIX_RE
+            .replace_all(&cleaned, "$1")
+            .into_owned();
+        if next == cleaned {
+            break;
+        }
+        cleaned = next;
+    }
+    cleaned = MULTISPACE_RE.replace_all(&cleaned, " ").into_owned();
+    cleaned.trim().to_string()
 }
 
 /// Format current timestamp (wall-clock time)

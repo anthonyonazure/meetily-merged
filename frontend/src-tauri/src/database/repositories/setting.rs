@@ -182,7 +182,7 @@ impl SettingsRepository {
     ) -> std::result::Result<(), sqlx::Error> {
         let api_key_column = match provider {
             "localWhisper" => "whisperApiKey",
-            "parakeet" => return Ok(()), // Parakeet doesn't need an API key, return early
+            "parakeet" | "qwenAsr" => return Ok(()), // Local engines don't need an API key, return early
             "remote" => "runpodApiKey",
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",
@@ -215,7 +215,7 @@ impl SettingsRepository {
     ) -> std::result::Result<Option<String>, sqlx::Error> {
         let api_key_column = match provider {
             "localWhisper" => "whisperApiKey",
-            "parakeet" => return Ok(None), // Parakeet doesn't need an API key
+            "parakeet" | "qwenAsr" => return Ok(None), // Local engines don't need an API key
             "remote" => "runpodApiKey",
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",

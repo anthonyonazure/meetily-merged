@@ -148,6 +148,8 @@ export function useDownloadProgressToast() {
   const cleanupDownload = useCallback((modelName: string, delay: number = 4000) => {
     // Remove download from map after delay (allows toast to show and auto-dismiss)
     setTimeout(() => {
+      const toastId = `download-${modelName}`;
+      toast.dismiss(toastId);
       setDownloads((prev) => {
         const updated = new Map(prev);
         updated.delete(modelName);
@@ -289,6 +291,83 @@ export function useDownloadProgressToast() {
         };
         updateDownload(modelName, downloadData);
         // Clean up after 11 seconds (error toast duration is 10s + 1s buffer)
+        cleanupDownload(modelName, 11000);
+      }
+    );
+
+    return () => {
+      unlistenProgress.then((fn) => fn());
+      unlistenComplete.then((fn) => fn());
+      unlistenError.then((fn) => fn());
+    };
+  }, [updateDownload, cleanupDownload]);
+
+  // Listen to Qwen ASR model download events
+  useEffect(() => {
+    const getQwenDisplayName = (modelName: string) =>
+      `Transcription Model (${modelName})`;
+
+    const getQwenFallbackSizeMb = (modelName: string) =>
+      modelName.toLowerCase().includes('1.7b') ? 1700 : 700;
+
+    const unlistenProgress = listen<{
+      modelName: string;
+      progress: number;
+      downloaded_mb?: number;
+      total_mb?: number;
+      speed_mbps?: number;
+      status?: string;
+    }>('qwen-asr-model-download-progress', (event) => {
+      const { modelName, progress, downloaded_mb, total_mb, speed_mbps, status } = event.payload;
+      const fallbackSizeMb = getQwenFallbackSizeMb(modelName);
+
+      const downloadData: DownloadProgress = {
+        modelName,
+        displayName: getQwenDisplayName(modelName),
+        progress: progress ?? 0,
+        downloadedMb: downloaded_mb ?? 0,
+        totalMb: total_mb ?? fallbackSizeMb,
+        speedMbps: speed_mbps ?? 0,
+        status: status === 'cancelled'
+          ? 'cancelled'
+          : status === 'completed' || progress >= 100
+            ? 'completed'
+            : 'downloading',
+      };
+
+      updateDownload(modelName, downloadData);
+
+      if (downloadData.status === 'completed') {
+        cleanupDownload(modelName, 4000);
+      } else if (downloadData.status === 'cancelled') {
+        cleanupDownload(modelName, 6000);
+      }
+    });
+
+    const unlistenComplete = listen<{ modelName: string }>(
+      'qwen-asr-model-download-complete',
+      (event) => {
+        const { modelName } = event.payload;
+        updateDownload(modelName, {
+          displayName: getQwenDisplayName(modelName),
+          progress: 100,
+          speedMbps: 0,
+          status: 'completed',
+        });
+        cleanupDownload(modelName, 4000);
+      }
+    );
+
+    const unlistenError = listen<{ modelName: string; error: string }>(
+      'qwen-asr-model-download-error',
+      (event) => {
+        const { modelName, error } = event.payload;
+        updateDownload(modelName, {
+          displayName: getQwenDisplayName(modelName),
+          status: 'error',
+          speedMbps: 0,
+          error: categorizeError(error),
+        });
         cleanupDownload(modelName, 11000);
       }
     );

@@ -15,6 +15,7 @@ use tauri::{AppHandle, Manager, Runtime};
 pub enum TranscriptionEngine {
     Whisper(Arc<crate::whisper_engine::WhisperEngine>),  // Direct access (backward compat)
     Parakeet(Arc<crate::parakeet_engine::ParakeetEngine>), // Direct access (backward compat)
+    QwenAsr(Arc<crate::qwen_asr_engine::QwenAsrEngine>), // Qwen3-ASR (GGML-based)
     Provider(Arc<dyn TranscriptionProvider>),  // Trait-based (preferred for new code)
 }
 
@@ -24,6 +25,7 @@ impl TranscriptionEngine {
         match self {
             Self::Whisper(engine) => engine.is_model_loaded().await,
             Self::Parakeet(engine) => engine.is_model_loaded().await,
+            Self::QwenAsr(engine) => engine.is_model_loaded().await,
             Self::Provider(provider) => provider.is_model_loaded().await,
         }
     }
@@ -33,6 +35,7 @@ impl TranscriptionEngine {
         match self {
             Self::Whisper(engine) => engine.get_current_model().await,
             Self::Parakeet(engine) => engine.get_current_model().await,
+            Self::QwenAsr(engine) => engine.get_current_model().await,
             Self::Provider(provider) => provider.get_current_model().await,
         }
     }
@@ -42,6 +45,7 @@ impl TranscriptionEngine {
         match self {
             Self::Whisper(_) => "Whisper (direct)",
             Self::Parakeet(_) => "Parakeet (direct)",
+            Self::QwenAsr(_) => "QwenASR (direct)",
             Self::Provider(provider) => provider.provider_name(),
         }
     }
@@ -149,6 +153,33 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
             info!("✅ Remote transcription configuration valid");
             Ok(())
         }
+        "qwenAsr" => {
+            info!("🔍 Validating Qwen ASR model...");
+            if !crate::qwen_asr_engine::commands::engine_available() {
+                return Err(
+                    "Qwen ASR is not available in this build. Please select a different transcription provider."
+                        .to_string(),
+                );
+            }
+            if let Err(init_error) = crate::qwen_asr_engine::commands::qwen_asr_init().await {
+                warn!("❌ Failed to initialize Qwen ASR engine: {}", init_error);
+                return Err(format!(
+                    "Failed to initialize Qwen ASR speech recognition: {}",
+                    init_error
+                ));
+            }
+
+            match crate::qwen_asr_engine::commands::qwen_asr_validate_model_ready_with_config(app).await {
+                Ok(model_name) => {
+                    info!("✅ Qwen ASR model validation successful: {} is ready", model_name);
+                    Ok(())
+                }
+                Err(e) => {
+                    warn!("❌ Qwen ASR model validation failed: {}", e);
+                    Err(e)
+                }
+            }
+        }
         "openai" => {
             info!("🔍 Validating OpenAI transcription provider...");
             let has_api_key = config
@@ -176,7 +207,7 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
         other => {
             warn!("❌ Unsupported transcription provider for local recording: {}", other);
             Err(format!(
-                "Provider '{}' is not supported for local transcription. Please select 'localWhisper', 'parakeet', 'remote', or 'openai'.",
+                "Provider '{}' is not supported for local transcription. Please select 'localWhisper', 'parakeet', 'qwenAsr', 'remote', or 'openai'.",
                 other
             ))
         }
@@ -262,6 +293,32 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
             ).map_err(|e| format!("Failed to create remote transcription provider: {}", e))?;
             Ok(TranscriptionEngine::Provider(Arc::new(provider)))
         }
+        "qwenAsr" => {
+            info!("🧠 Initializing Qwen ASR transcription engine");
+
+            let engine = {
+                let guard = crate::qwen_asr_engine::commands::QWEN_ASR_ENGINE
+                    .lock()
+                    .unwrap();
+                guard.as_ref().cloned()
+            };
+
+            match engine {
+                Some(engine) => {
+                    if engine.is_model_loaded().await {
+                        let model_name = engine.get_current_model().await
+                            .unwrap_or_else(|| "unknown".to_string());
+                        info!("✅ Qwen ASR model '{}' already loaded", model_name);
+                        Ok(TranscriptionEngine::QwenAsr(engine))
+                    } else {
+                        Err("Qwen ASR engine initialized but no model loaded. This should not happen after validation.".to_string())
+                    }
+                }
+                None => {
+                    Err("Qwen ASR engine not initialized. This should not happen after validation.".to_string())
+                }
+            }
+        }
         "openai" => {
             info!("☁️ Initializing OpenAI transcription provider");
 
@@ -289,7 +346,7 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
         }
         other => {
             Err(format!(
-                "Unsupported transcription provider '{}'. Supported: parakeet, localWhisper, remote, openai.",
+                "Unsupported transcription provider '{}'. Supported: parakeet, localWhisper, qwenAsr, remote, openai.",
                 other
             ))
         }

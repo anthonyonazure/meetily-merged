@@ -6,14 +6,16 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { ModelManager } from './WhisperModelManager';
 import { ParakeetModelManager } from './ParakeetModelManager';
+import { QwenAsrModelManager } from './QwenAsrModelManager';
 import { DiarizationSettings } from './DiarizationSettings';
+import { isQwenAsrAvailable } from '@/lib/qwen-asr';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { RefreshCw, CheckCircle2 } from 'lucide-react';
 
 
 export interface TranscriptModelProps {
-    provider: 'localWhisper' | 'parakeet' | 'remote' | 'deepgram' | 'elevenLabs' | 'groq' | 'openai';
+    provider: 'localWhisper' | 'parakeet' | 'qwenAsr' | 'remote' | 'deepgram' | 'elevenLabs' | 'groq' | 'openai';
     model: string;
     endpointUrl?: string | null;
     apiKey?: string | null;
@@ -25,7 +27,7 @@ export interface TranscriptSettingsProps {
     onModelSelect?: () => void;
 }
 
-const LOCAL_PROVIDERS = new Set<TranscriptModelProps['provider']>(['localWhisper', 'parakeet']);
+const LOCAL_PROVIDERS = new Set<TranscriptModelProps['provider']>(['localWhisper', 'parakeet', 'qwenAsr']);
 
 // One-click official OpenAI lane (endpoint hardcoded in the Rust provider).
 // Distinct from 'remote', which targets any custom OpenAI-compatible endpoint.
@@ -40,6 +42,17 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
     const [apiKeyDirty, setApiKeyDirty] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
+    // Qwen3-ASR is an optional build feature; only show the option when the
+    // engine reports itself available (stub builds return false).
+    const [qwenAsrAvailable, setQwenAsrAvailable] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        isQwenAsrAvailable().then((available) => {
+            if (!cancelled) setQwenAsrAvailable(available);
+        });
+        return () => { cancelled = true; };
+    }, []);
 
     // Sync local draft state when the context config updates (e.g., async load on mount)
     useEffect(() => {
@@ -140,6 +153,13 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
         if (onModelSelect) onModelSelect();
     };
 
+    const handleQwenAsrModelSelect = (modelName: string) => {
+        const config: TranscriptModelProps = { provider: 'qwenAsr', model: modelName, apiKey: null };
+        setUiModel(modelName);
+        setTranscriptModelConfig(config);
+        if (onModelSelect) onModelSelect();
+    };
+
     return (
         <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
@@ -187,6 +207,9 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                             <SelectContent>
                                 <SelectItem value="parakeet">Parakeet (Recommended - Real-time / Accurate)</SelectItem>
                                 <SelectItem value="localWhisper">Local Whisper (High Accuracy)</SelectItem>
+                                {(qwenAsrAvailable || uiProvider === 'qwenAsr') && (
+                                    <SelectItem value="qwenAsr">Qwen3 ASR (Multilingual / Accurate)</SelectItem>
+                                )}
                                 <SelectItem value="remote">Remote Transcription</SelectItem>
                                 <SelectItem value="openai">OpenAI API (Cloud)</SelectItem>
                             </SelectContent>
@@ -209,6 +232,16 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                         <ParakeetModelManager
                             selectedModel={transcriptModelConfig.provider === 'parakeet' ? transcriptModelConfig.model : undefined}
                             onModelSelect={handleParakeetModelSelect}
+                            autoSave={true}
+                        />
+                    </div>
+                )}
+
+                {uiProvider === 'qwenAsr' && (
+                    <div>
+                        <QwenAsrModelManager
+                            selectedModel={transcriptModelConfig.provider === 'qwenAsr' ? transcriptModelConfig.model : undefined}
+                            onModelSelect={handleQwenAsrModelSelect}
                             autoSave={true}
                         />
                     </div>

@@ -51,6 +51,15 @@ export async function checkTranscriptionReadiness(
     if (config.provider === 'parakeet') {
       return await localModelReadiness(config, invoke, 'parakeet');
     }
+    if (config.provider === 'qwenAsr') {
+      await invoke('qwen_asr_init');
+      const models = await invoke<TranscriptionModelInfo[]>('qwen_asr_get_available_models');
+      const readiness = modelStatus(models.find(model => model.name === config.model));
+      if (readiness.ready || readiness.downloading) return readiness;
+      // Fall back to any available model: the backend loads a fallback at start
+      const anyAvailable = models.some(model => modelStatus(model).ready);
+      return { ready: anyAvailable, downloading: models.some(model => modelStatus(model).downloading) };
+    }
     return { ready: true, downloading: false };
   } catch (error) {
     console.error(`Failed to check ${config.provider} transcription status:`, error);

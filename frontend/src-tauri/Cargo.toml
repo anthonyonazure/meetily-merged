@@ -52,6 +52,13 @@ hipblas = ["whisper-rs/hipblas"]   # Linux: AMD ROCm HIP
 openblas = ["whisper-rs/openblas"] # Optimized BLAS (Auto-enabled on Windows/Linux)
 openmp = ["whisper-rs/openmp"]     # OpenMP parallel processing
 
+# Qwen3-ASR (GGML-based multilingual ASR). Off by default: without the feature
+# the qwen3-asr-sys crate builds a stub (no vendor clone, no network access at
+# build time) and the engine reports itself unavailable, hiding the UI option.
+qwen-asr = ["qwen3-asr-sys/vendor"]
+qwen-asr-metal = ["qwen-asr", "qwen3-asr-sys/metal"]
+qwen-asr-cuda = ["qwen-asr", "qwen3-asr-sys/cuda"]
+
 [build-dependencies]
 tauri-build = { version = "2.3.0", features = [] }
 reqwest = { version = "0.11", features = ["blocking", "multipart", "json", "stream"] }
@@ -104,6 +111,11 @@ silero_rs = { git = "https://github.com/emotechlab/silero-rs", rev = "26a6460", 
 # Parakeet (ONNX-based fast transcription) dependencies
 ort = { version = "2.0.0-rc.10" }  # ONNX Runtime for Parakeet models
 thiserror = "2.0.16"                # Error handling for Parakeet
+
+# Qwen3-ASR FFI crate. Always a dependency so the engine module compiles in
+# every configuration; the real vendor engine is gated by the `qwen-asr`
+# feature above (stub mode otherwise).
+qwen3-asr-sys = { path = "qwen3-asr-sys" }
 
 # Speaker diarization (post-processing) via sherpa-onnx OfflineSpeakerDiarization.
 # `shared` feature links the prebuilt shared C library to avoid MT/MD CRT
