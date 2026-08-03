@@ -580,6 +580,19 @@ impl SummaryService {
                         "Summary saved successfully for meeting_id: {}",
                         meeting_id
                     );
+
+                    // Meeting Agents: kick off enabled auto-run agents (v1: the
+                    // Action Tracker) with the same provider/model that produced
+                    // this summary. Fire-and-forget; agent failures never affect
+                    // the summary result.
+                    crate::agents::runner::auto_run_after_summary(
+                        pool.clone(),
+                        meeting_id.clone(),
+                        model_provider.clone(),
+                        model_name.clone(),
+                        app_data_dir.clone(),
+                    )
+                    .await;
                 }
             }
             Err(e) => {

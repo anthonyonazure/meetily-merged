@@ -153,6 +153,7 @@ pub(crate) use perf_trace;
 // Re-export async logging macros for external use (removed due to macro conflicts)
 
 // Declare audio module
+pub mod agents;
 pub mod api;
 pub mod audio;
 pub mod config;
@@ -729,6 +730,16 @@ pub fn run() {
             summary::commands::api_save_meeting_detected_summary_language,
             summary::commands::api_detect_transcript_summary_language,
             summary::commands::api_cancel_summary,
+            // Meeting Agents commands
+            agents::commands::agents_list,
+            agents::commands::agent_run,
+            agents::commands::agent_runs_for_meeting,
+            agents::commands::agents_get_settings,
+            agents::commands::agents_set_enabled,
+            agents::commands::actions_list,
+            agents::commands::actions_for_meeting,
+            agents::commands::action_set_status,
+            agents::commands::action_delete,
             // Template commands
             summary::template_commands::api_list_templates,
             summary::template_commands::api_get_template_details,

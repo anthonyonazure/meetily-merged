@@ -110,6 +110,52 @@ impl Setting {
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AgentRun {
+    pub id: String,
+    pub agent_id: String,
+    pub meeting_id: String,
+    pub status: String,
+    pub output_md: Option<String>,
+    pub error: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ActionItem {
+    pub id: String,
+    pub meeting_id: String,
+    pub agent_run_id: Option<String>,
+    pub description: String,
+    pub owner: Option<String>,
+    pub due_hint: Option<String>,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Action item joined with its meeting title, for the cross-meeting Actions view.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ActionItemWithMeeting {
+    pub id: String,
+    pub meeting_id: String,
+    pub agent_run_id: Option<String>,
+    pub description: String,
+    pub owner: Option<String>,
+    pub due_hint: Option<String>,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub meeting_title: String,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AgentSettingRow {
+    pub agent_id: String,
+    pub enabled: bool,
+    pub auto_run: bool,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct TranscriptSetting {
     pub id: String,
     pub provider: String,

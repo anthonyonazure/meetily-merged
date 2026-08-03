@@ -4,6 +4,15 @@
 /// `tauri::generate_handler!` registration in `src/lib.rs`. New commands stay
 /// denied until they are added to all three places.
 pub const WEBVIEW_COMMANDS: &[&str] = &[
+    "action_delete",
+    "action_set_status",
+    "actions_for_meeting",
+    "actions_list",
+    "agent_run",
+    "agent_runs_for_meeting",
+    "agents_get_settings",
+    "agents_list",
+    "agents_set_enabled",
     "api_cancel_summary",
     "api_delete_meeting",
     "api_detect_transcript_summary_language",
