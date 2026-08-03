@@ -90,7 +90,13 @@
             "prosemirror-state": "1.4.3",
             "prosemirror-view": "1.41.3",
             "prosemirror-transform": "1.10.4",
-            "prosemirror-tables": "1.8.1"
+            "prosemirror-tables": "1.8.1",
+            "@blocknote/core@0.36.0>uuid": "11.1.1",
+            "markdown-it": "14.3.0",
+            "@babel/core": "7.29.6",
+            "postcss": "8.5.18",
+            "brace-expansion@>=2.0.0 <2.1.3": "2.1.3",
+            "linkify-it@<=5.0.1": "5.0.2"
         }
     },
     "devDependencies": {
