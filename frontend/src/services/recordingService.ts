@@ -146,6 +146,23 @@ export class RecordingService {
   }
 
   /**
+   * Listen for recording-error event.
+   *
+   * The backend emits this when the audio pipeline fails, and it stops the recording
+   * itself once the errors pile up. Nothing used to listen, so a pipeline that died
+   * mid-meeting simply stopped producing transcript while the user kept talking — the
+   * recording ended with no explanation and the audio was gone.
+   *
+   * @param callback - Function to call with the user-facing error message
+   * @returns Promise that resolves to unlisten function
+   */
+  async onRecordingError(callback: (message: string) => void): Promise<UnlistenFn> {
+    return listen<string>('recording-error', (event) => {
+      callback(event.payload);
+    });
+  }
+
+  /**
    * Listen for chunk-drop-warning event (audio buffer overflow)
    * @param callback - Function to call when chunks are dropped
    * @returns Promise that resolves to unlisten function

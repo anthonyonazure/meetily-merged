@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { recordingService } from '@/services/recordingService';
 
 /**
@@ -68,6 +69,11 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
   });
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // The backend reports each pipeline error separately and only gives up after several
+  // of them, so without this the user would get a burst of identical toasts. One per
+  // recording session is enough; it is reset when the next recording starts.
+  const errorReportedRef = useRef(false);
 
   // NEW: Status setter with logging
   const setStatus = useCallback((status: RecordingStatus, message?: string) => {
@@ -139,6 +145,7 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
         // Recording started
         const unlistenStarted = await recordingService.onRecordingStarted(() => {
           console.log('[RecordingStateContext] Recording started event');
+          errorReportedRef.current = false;
           setState(prev => ({
             ...prev,
             isRecording: true,
@@ -149,6 +156,24 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
           startPolling();
         });
         unsubscribers.push(unlistenStarted);
+
+        // Audio pipeline failure.
+        //
+        // The backend stops the recording itself once these pile up, but nothing was
+        // listening, so the failure was invisible: the transcript simply stopped growing
+        // while the user kept talking, and the rest of the meeting was lost. A dead
+        // recorder is exactly the case that warrants a toast.
+        const unlistenError = await recordingService.onRecordingError((message) => {
+          console.error('[RecordingStateContext] Recording error event:', message);
+          if (errorReportedRef.current) return;
+          errorReportedRef.current = true;
+
+          toast.error('Recording problem', {
+            description: message || 'The audio pipeline reported an error. If the transcript has stopped, stop and restart the recording.',
+            duration: 10000,
+          });
+        });
+        unsubscribers.push(unlistenError);
 
         // Recording stopped
         const unlistenStopped = await recordingService.onRecordingStopped((payload) => {
