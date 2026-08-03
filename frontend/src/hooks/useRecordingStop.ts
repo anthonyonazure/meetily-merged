@@ -355,16 +355,16 @@ export function useRecordingStop(
           // Mark as completed
           setStatus(RecordingStatus.COMPLETED);
 
-          // Show success toast with navigation option
+          // A status message, not a call to action.
+          //
+          // It used to carry a "View Meeting" button and sit for 10 seconds — but the
+          // app auto-navigates to that very meeting 2 seconds later (below), so the
+          // button was asking the user to do something that had already happened, while
+          // the toast lingered over the meeting page and covered the input box beneath
+          // the transcript.
           toast.success('Recording saved successfully!', {
             description: `${freshTranscripts.length} transcript segments saved.`,
-            action: {
-              label: 'View Meeting',
-              onClick: () => {
-                router.push(`/meeting-details?id=${meetingId}`);
-              }
-            },
-            duration: 10000,
+            duration: 4000,
           });
 
           // Auto-navigate after a short delay with source parameter
