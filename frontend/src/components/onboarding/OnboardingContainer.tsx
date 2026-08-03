@@ -86,7 +86,7 @@ export function OnboardingContainer({
 
         {/* Header - Fixed */}
         <div className="mb-4 text-center space-y-3 flex-shrink-0">
-          <h1 className="text-4xl font-semibold text-ink animate-fade-in-up">{title}</h1>
+          <h1 className="text-4xl font-display font-semibold text-ink animate-fade-in-up">{title}</h1>
           {description && (
             <p className="text-base text-muted-ink max-w-md mx-auto animate-fade-in-up delay-75">
               {description}

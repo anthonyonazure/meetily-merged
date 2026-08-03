@@ -420,7 +420,7 @@ export function DownloadProgressStep() {
         <div className="space-y-2">
           <div className="w-full h-2 bg-active rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-ink to-ink rounded-full transition-all duration-300"
+              className="h-full bg-ink rounded-full transition-all duration-300"
               style={{ width: `${state.progress}%` }}
             />
           </div>
@@ -449,7 +449,7 @@ export function DownloadProgressStep() {
           {(title === 'Transcription Engine' || title === 'Summary Engine') && (
             <button
               onClick={title === 'Transcription Engine' ? handleRetryDownload : handleRetrySummaryDownload}
-              className="mt-3 w-full h-9 px-4 bg-ink hover:bg-ink text-white text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+              className="mt-3 w-full h-9 px-4 bg-ink hover:bg-ink/90 text-app text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -517,7 +517,7 @@ export function DownloadProgressStep() {
           <Button
             onClick={handleContinue}
             disabled={!parakeetDownloaded || isCompleting}
-            className="w-full h-11 bg-ink hover:bg-ink text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-11 bg-ink hover:bg-ink/90 text-app disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isCompleting || !parakeetDownloaded) ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

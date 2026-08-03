@@ -461,7 +461,7 @@ const Sidebar: React.FC = () => {
             <TooltipTrigger asChild>
               <button
                 onClick={() => router.push('/')}
-                className={`p-2 rounded-lg transition-colors duration-150 ${isHomePage ? 'bg-wash' : 'hover:bg-wash'
+                className={`p-2 rounded-lg transition-colors duration-150 ${isHomePage ? 'bg-active' : 'hover:bg-active/60'
                   }`}
               >
                 <Home className="w-5 h-5 text-muted-ink" />
@@ -477,12 +477,12 @@ const Sidebar: React.FC = () => {
               <button
                 onClick={handleRecordingToggle}
                 disabled={isRecording}
-                className={`p-2 ${isRecording ? 'bg-red-500 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'} rounded-full transition-colors duration-150 shadow-sm`}
+                className={`p-2 ${isRecording ? 'bg-rec cursor-not-allowed' : 'bg-rec hover:bg-rec/90'} rounded-full transition-colors duration-150 shadow-sm`}
               >
                 {isRecording ? (
-                  <Square className="w-5 h-5 text-white" />
+                  <Square className="w-5 h-5 text-app" />
                 ) : (
-                  <Mic className="w-5 h-5 text-white" />
+                  <Mic className="w-5 h-5 text-app" />
                 )}
               </button>
             </TooltipTrigger>
@@ -514,7 +514,7 @@ const Sidebar: React.FC = () => {
                   if (isCollapsed) toggleCollapse();
                   toggleFolder('meetings');
                 }}
-                className={`p-2 rounded-lg transition-colors duration-150 ${isMeetingPage ? 'bg-wash' : 'hover:bg-wash'
+                className={`p-2 rounded-lg transition-colors duration-150 ${isMeetingPage ? 'bg-active' : 'hover:bg-active/60'
                   }`}
               >
                 <NotebookPen className="w-5 h-5 text-muted-ink" />
@@ -529,7 +529,7 @@ const Sidebar: React.FC = () => {
             <TooltipTrigger asChild>
               <button
                 onClick={() => router.push('/actions')}
-                className={`p-2 rounded-lg transition-colors duration-150 ${pathname === '/actions' ? 'bg-wash' : 'hover:bg-wash'
+                className={`p-2 rounded-lg transition-colors duration-150 ${pathname === '/actions' ? 'bg-active' : 'hover:bg-active/60'
                   }`}
               >
                 <ListChecks className="w-5 h-5 text-muted-ink" />
@@ -544,7 +544,7 @@ const Sidebar: React.FC = () => {
             <TooltipTrigger asChild>
               <button
                 onClick={() => router.push('/settings')}
-                className={`p-2 rounded-lg transition-colors duration-150 ${isSettingsPage ? 'bg-wash' : 'hover:bg-wash'
+                className={`p-2 rounded-lg transition-colors duration-150 ${isSettingsPage ? 'bg-active' : 'hover:bg-active/60'
                   }`}
               >
                 <Settings className="w-5 h-5 text-muted-ink" />
@@ -584,8 +584,8 @@ const Sidebar: React.FC = () => {
         <div
           className={`flex items-center transition-all duration-150 group ${item.type === 'folder' && depth === 0
             ? 'p-3 text-lg font-semibold h-10 mx-3 mt-3 rounded-lg'
-            : `px-3 py-2 my-0.5 rounded-md text-sm ${isActive ? 'bg-blue-100 text-blue-700 font-medium' :
-              hasTranscriptMatch ? 'bg-yellow-50' : 'hover:bg-wash'
+            : `px-3 py-2 my-0.5 rounded-md text-sm ${isActive ? 'bg-active text-ink font-medium' :
+              hasTranscriptMatch ? 'bg-active/70' : 'hover:bg-active/60'
             } cursor-pointer`
             }`}
           style={item.type === 'folder' && depth === 0 ? {} : { paddingLeft }}
@@ -623,7 +623,7 @@ const Sidebar: React.FC = () => {
             <div className="flex flex-col w-full">
               <div className="flex items-center w-full">
                 {isMeetingItem ? (
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full mr-2 bg-wash">
+                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full mr-2 bg-active">
                     <File className="w-3.5 h-3.5 text-muted-ink" />
                   </div>
                 ) : (
@@ -660,8 +660,8 @@ const Sidebar: React.FC = () => {
 
               {/* Show transcript match snippet if available */}
               {hasTranscriptMatch && (
-                <div className="mt-1 ml-8 text-xs text-muted-ink bg-yellow-50 p-1.5 rounded border border-yellow-100 line-clamp-2">
-                  <span className="font-medium text-yellow-600">Match:</span> {matchingResult.matchContext}
+                <div className="mt-1 ml-8 text-xs text-muted-ink bg-surface p-1.5 rounded border border-edge line-clamp-2">
+                  <span className="font-medium text-ink">Match:</span> {matchingResult.matchContext}
                 </div>
               )}
             </div>
@@ -692,7 +692,7 @@ const Sidebar: React.FC = () => {
       </button>
 
       <div
-        className={`h-screen bg-surface border-r shadow-sm flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'
+        className={`h-screen bg-wash border-r border-edge shadow-sm flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'
           }`}
       >
         {/*  Header with traffic light spacing */}
@@ -742,14 +742,14 @@ const Sidebar: React.FC = () => {
               <>
                 <div
                   onClick={() => router.push('/')}
-                  className="p-3  text-lg font-semibold items-center hover:bg-wash h-10   flex mx-3 mt-3 rounded-lg cursor-pointer"
+                  className="p-3  text-lg font-semibold items-center hover:bg-active/60 h-10   flex mx-3 mt-3 rounded-lg cursor-pointer"
                 >
                   <Home className="w-4 h-4 mr-2" />
                   <span>Home</span>
                 </div>
                 <div
                   onClick={() => router.push('/actions')}
-                  className="p-3  text-lg font-semibold items-center hover:bg-wash h-10   flex mx-3 rounded-lg cursor-pointer"
+                  className="p-3  text-lg font-semibold items-center hover:bg-active/60 h-10   flex mx-3 rounded-lg cursor-pointer"
                 >
                   <ListChecks className="w-4 h-4 mr-2" />
                   <span>Actions</span>
@@ -803,7 +803,7 @@ const Sidebar: React.FC = () => {
             <button
               onClick={handleRecordingToggle}
               disabled={isRecording}
-              className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white ${isRecording ? 'bg-red-300 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'} rounded-lg transition-colors shadow-sm`}
+              className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-app ${isRecording ? 'bg-rec/60 cursor-not-allowed' : 'bg-rec hover:bg-rec/90'} rounded-lg transition-colors shadow-sm`}
             >
               {isRecording ? (
                 <>

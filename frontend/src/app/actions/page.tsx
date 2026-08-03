@@ -83,7 +83,7 @@ export default function ActionsPage() {
       <div className="max-w-3xl mx-auto p-8">
         <div className="flex items-center gap-3 mb-1">
           <ListChecks className="w-6 h-6 text-muted-ink" />
-          <h1 className="text-2xl font-semibold text-ink">Actions</h1>
+          <h1 className="text-2xl font-display font-semibold text-ink">Actions</h1>
         </div>
         <p className="text-sm text-muted-ink mb-6">
           Action items extracted from your meetings by the Action Tracker agent.

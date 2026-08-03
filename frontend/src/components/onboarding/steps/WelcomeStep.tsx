@@ -54,7 +54,7 @@ export function WelcomeStep() {
         <div className="w-full max-w-xs space-y-3">
           <Button
             onClick={goNext}
-            className="w-full h-11 bg-ink hover:bg-ink text-white"
+            className="w-full h-11 bg-ink hover:bg-ink/90 text-app"
           >
             Get Started
           </Button>

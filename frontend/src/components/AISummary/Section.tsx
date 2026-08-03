@@ -63,7 +63,7 @@ export const Section: React.FC<SectionProps> = ({
       transition={{ duration: 0.5 }}
       className="mb-8"
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 border-b-2 border-ink pb-1">
         <EditableTitle
           title={section.title}
           isEditing={isEditingTitle}

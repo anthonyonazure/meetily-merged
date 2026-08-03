@@ -63,35 +63,24 @@ function cleanStopWords(text: string): string {
     return cleanedText.replace(/\s+/g, ' ').trim();
 }
 
-// Speaker label colors
-const SPEAKER_COLORS: Record<string, { border: string; text: string }> = {
-    'You': { border: 'border-l-blue-500', text: 'text-blue-600' },
-    'Others': { border: 'border-l-orange-500', text: 'text-orange-600' },
-};
+// Ledger speaker chip slots (see globals.css). "You" gets its own slot;
+// diarized "Speaker N" labels cycle stably through slots s1-s7, so the same
+// speaker number always maps to the same chip, across renders and views.
+const DIARIZED_CHIP_SLOTS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'] as const;
 
-// Stable palette for diarized "Speaker N" labels: the same speaker number
-// always maps to the same color, across renders and views.
-const DIARIZED_SPEAKER_PALETTE: { border: string; text: string }[] = [
-    { border: 'border-l-orange-500', text: 'text-orange-600' },
-    { border: 'border-l-purple-500', text: 'text-purple-600' },
-    { border: 'border-l-teal-500', text: 'text-teal-600' },
-    { border: 'border-l-pink-500', text: 'text-pink-600' },
-    { border: 'border-l-indigo-500', text: 'text-indigo-600' },
-    { border: 'border-l-amber-500', text: 'text-amber-600' },
-    { border: 'border-l-cyan-500', text: 'text-cyan-600' },
-    { border: 'border-l-rose-500', text: 'text-rose-600' },
-];
-
-function getSpeakerStyle(speaker?: string) {
-    if (!speaker) return { border: '', text: '' };
-    const known = SPEAKER_COLORS[speaker];
-    if (known) return known;
+export function getSpeakerStyle(speaker?: string) {
+    if (!speaker) return { border: '', chip: '' };
+    if (speaker === 'You') {
+        return { border: 'speaker-border--you', chip: 'speaker-chip--you' };
+    }
     const diarized = /^Speaker (\d+)$/.exec(speaker);
     if (diarized) {
-        const index = (parseInt(diarized[1], 10) - 1) % DIARIZED_SPEAKER_PALETTE.length;
-        return DIARIZED_SPEAKER_PALETTE[Math.max(0, index)];
+        const index = Math.max(0, (parseInt(diarized[1], 10) - 1) % DIARIZED_CHIP_SLOTS.length);
+        const slot = DIARIZED_CHIP_SLOTS[index];
+        return { border: `speaker-border--${slot}`, chip: `speaker-chip--${slot}` };
     }
-    return { border: 'border-l-faint', text: 'text-muted-ink' };
+    // Unrecognized labels (e.g. "Others") take the first slot
+    return { border: 'speaker-border--s1', chip: 'speaker-chip--s1' };
 }
 
 // Memoized transcript segment component
@@ -120,7 +109,7 @@ const TranscriptSegment = memo(function TranscriptSegment({
             <div className="flex items-start gap-3">
                 <Tooltip>
                     <TooltipTrigger>
-                        <span className="text-xs text-faint mt-0.5 flex-shrink-0 min-w-[50px]">
+                        <span className="text-xs font-mono text-faint mt-0.5 flex-shrink-0 min-w-[50px]">
                             {formatRecordingTime(timestamp)}
                         </span>
                     </TooltipTrigger>
@@ -132,8 +121,10 @@ const TranscriptSegment = memo(function TranscriptSegment({
                 </Tooltip>
                 <div className="flex-1">
                     {speaker && (
-                        <span className={`text-xs font-semibold ${speakerStyle.text} mb-1 block`}>
-                            {speaker}
+                        <span className="mb-1 block">
+                            <span className={`text-xs speaker-chip ${speakerStyle.chip}`}>
+                                {speaker}
+                            </span>
                         </span>
                     )}
                     {isStreaming ? (
@@ -285,7 +276,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                     {isRecording ? (
                         <>
                             <div className="flex items-center justify-center mb-3">
-                                <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-orange-500' : 'bg-blue-500 animate-pulse'}`}></div>
+                                <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-faint' : 'bg-rec animate-pulse'}`}></div>
                             </div>
                             <p className="text-sm text-muted-ink">
                                 {isPaused ? 'Recording paused' : 'Listening for speech...'}
@@ -296,7 +287,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                         </>
                     ) : (
                         <>
-                            <p className="text-lg font-semibold">Welcome to meetily!</p>
+                            <p className="text-xl font-display font-semibold text-ink">Welcome to meetily!</p>
                             <p className="text-xs mt-1">Start recording to see live transcription</p>
                         </>
                     )}
@@ -366,7 +357,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                             exit={{ opacity: 0 }}
                             className="flex items-center gap-2 mt-4 text-muted-ink"
                         >
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-rec rounded-full animate-pulse"></div>
                             <span className="text-sm">Listening...</span>
                         </motion.div>
                     )}
@@ -423,7 +414,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                             exit={{ opacity: 0 }}
                             className="flex items-center gap-2 mt-4 text-muted-ink"
                         >
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-rec rounded-full animate-pulse"></div>
                             <span className="text-sm">Listening...</span>
                         </motion.div>
                     )}

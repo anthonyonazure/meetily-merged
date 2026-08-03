@@ -156,7 +156,7 @@ export function UpcomingEvents() {
             key={`${event.id}-${event.start}`}
             onClick={() => handleEventClick(event)}
             title={`Start a meeting named "${event.title}"`}
-            className="group flex items-center gap-2 mx-3 px-2 py-1.5 rounded-md hover:bg-wash cursor-pointer"
+            className="group flex items-center gap-2 mx-3 px-2 py-1.5 rounded-md hover:bg-active/60 cursor-pointer"
           >
             <span className="text-xs text-faint w-14 flex-shrink-0">
               {formatEventTime(event)}

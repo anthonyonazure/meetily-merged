@@ -44,7 +44,7 @@ export async function showRecordingNotification(): Promise<void> {
                 }
                 toast.dismiss(toastId);
               }}
-              className="w-full px-3 py-1.5 bg-ink text-white text-xs rounded hover:bg-ink transition-colors font-medium"
+              className="w-full px-3 py-1.5 bg-ink text-app text-xs rounded hover:bg-ink/90 transition-colors font-medium"
             >
               I've Notified Participants
             </button>

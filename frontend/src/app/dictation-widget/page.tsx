@@ -24,7 +24,7 @@ const DRAG_REGION_STYLE = { WebkitAppRegion: 'drag' } as CSSProperties;
 
 function StateIcon({ state }: { state: WidgetState }) {
   if (state === 'recording') {
-    return <Mic className="w-4 h-4 text-rose-500" />;
+    return <Mic className="w-4 h-4 text-rec" />;
   }
   if (state === 'processing') {
     return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
@@ -74,7 +74,7 @@ export default function DictationWidgetPage() {
       data-tauri-drag-region
     >
       <div
-        className="w-[392px] rounded-2xl border border-white/50 bg-surface/90 backdrop-blur-xl shadow-[0_12px_38px_rgba(15,23,42,0.2)] px-4 py-3.5"
+        className="w-[392px] rounded-2xl border border-edge/70 bg-surface/90 backdrop-blur-xl shadow-[0_12px_38px_rgba(15,23,42,0.2)] px-4 py-3.5"
         style={DRAG_REGION_STYLE}
       >
         <div className="flex items-start justify-between gap-3">
@@ -88,7 +88,7 @@ export default function DictationWidgetPage() {
             </div>
           </div>
 
-          <span className="text-[10px] px-2 py-1 rounded-full bg-wash text-muted-ink uppercase tracking-wide">
+          <span className="status-chip text-[10px] uppercase tracking-wide">
             Dictation
           </span>
         </div>

@@ -94,20 +94,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       ? 'dark'
       : 'light';
 
-  // Apply the class and keep the native window chrome in step.
+  // Apply the class that drives every Ledger CSS token.
+  //
+  // Native window chrome: tauri.conf.json no longer forces "Light", so the
+  // titlebar follows the OS. Forcing light/dark in-app does NOT retint the
+  // titlebar — that would need window.setTheme(), whose capability
+  // (core:window:allow-set-theme) is deliberately not granted; the
+  // tauri-security-contract test pins the permission list.
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolved === 'dark');
-    (async () => {
-      try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        await getCurrentWindow().setTheme(
-          preference === 'system' ? null : preference
-        );
-      } catch {
-        // Not running under Tauri, or setTheme unsupported on this platform.
-      }
-    })();
-  }, [preference, resolved]);
+  }, [resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
