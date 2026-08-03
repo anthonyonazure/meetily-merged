@@ -168,6 +168,7 @@ pub mod anthropic;
 pub mod groq;
 pub mod openrouter;
 pub mod parakeet_engine;
+pub mod speaker_diarization_engine;
 pub mod export;
 pub mod state;
 pub mod summary;
@@ -550,6 +551,10 @@ pub fn run() {
             // Set Parakeet models directory
             parakeet_engine::commands::set_models_directory(&_app.handle());
 
+            // Set speaker diarization models directory (models load lazily on
+            // first diarization run; nothing heavy happens at startup)
+            speaker_diarization_engine::commands::set_models_directory(&_app.handle());
+
             // Initialize Parakeet engine on startup
             tauri::async_runtime::spawn(async {
                 if let Err(e) = parakeet_engine::commands::parakeet_init().await {
@@ -644,6 +649,13 @@ pub fn run() {
             parakeet_engine::commands::parakeet_cancel_download,
             parakeet_engine::commands::parakeet_delete_corrupted_model,
             parakeet_engine::commands::open_parakeet_models_folder,
+            // Speaker diarization commands
+            speaker_diarization_engine::commands::diarization_is_ready,
+            speaker_diarization_engine::commands::diarization_get_model_info,
+            speaker_diarization_engine::commands::diarization_download_models,
+            speaker_diarization_engine::commands::diarization_get_settings,
+            speaker_diarization_engine::commands::diarization_set_enabled,
+            speaker_diarization_engine::commands::run_speaker_diarization,
             // Parallel processing commands
             whisper_engine::parallel_commands::initialize_parallel_processor,
             whisper_engine::parallel_commands::start_parallel_processing,

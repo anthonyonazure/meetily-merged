@@ -1017,6 +1017,10 @@ pub async fn api_save_transcript<R: Runtime>(
 
     let pool = state.db_manager.pool();
 
+    // Recorded meetings (ones with a folder_path holding the saved audio) get a
+    // post-save speaker diarization pass; remember the flag before the move.
+    let has_recording_folder = folder_path.is_some();
+
     // Now, call the repository with the correctly typed data.
     match TranscriptsRepository::save_transcript(
         pool,
@@ -1031,6 +1035,19 @@ pub async fn api_save_transcript<R: Runtime>(
                 "Successfully saved transcript and created meeting with id: {}",
                 meeting_id
             );
+
+            // Kick off on-device speaker diarization in the background. This is
+            // strictly best-effort: it refines "Others" lines into "Speaker N"
+            // labels after the fact, and any failure only logs and emits a
+            // non-blocking event — the saved recording and transcripts above
+            // are never affected.
+            if has_recording_folder {
+                crate::speaker_diarization_engine::commands::spawn_auto_diarization(
+                    &_app,
+                    meeting_id.clone(),
+                );
+            }
+
             Ok(serde_json::json!({
                 "status": "success",
                 "message": "Transcript saved successfully",
