@@ -3,6 +3,18 @@ use serde::{Deserialize, Serialize};
 use tauri::Runtime;
 use tracing::{info, warn};
 
+/// Full section data for template details
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateSectionInfo {
+    pub title: String,
+    pub instruction: String,
+    pub format: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example_item_format: Option<String>,
+}
+
 /// Template metadata for UI display
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateInfo {
@@ -14,9 +26,12 @@ pub struct TemplateInfo {
 
     /// Brief description of the template's purpose
     pub description: String,
+
+    /// Whether this is a user-created custom template
+    pub is_custom: bool,
 }
 
-/// Detailed template structure for preview/debugging
+/// Detailed template structure for preview/editing
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateDetails {
     /// Template identifier
@@ -28,17 +43,14 @@ pub struct TemplateDetails {
     /// Description
     pub description: String,
 
-    /// List of section titles in order
-    pub sections: Vec<String>,
+    /// Whether this is a user-created custom template
+    pub is_custom: bool,
+
+    /// Full section data
+    pub sections: Vec<TemplateSectionInfo>,
 }
 
 /// Lists all available templates
-///
-/// Returns templates from both built-in (embedded) and custom (user data directory) sources.
-/// Templates are automatically discovered - no code changes needed to add new templates.
-///
-/// # Returns
-/// Vector of TemplateInfo with id, name, and description for each template
 #[tauri::command]
 pub async fn api_list_templates<R: Runtime>(
     _app: tauri::AppHandle<R>,
@@ -49,10 +61,11 @@ pub async fn api_list_templates<R: Runtime>(
 
     let template_infos: Vec<TemplateInfo> = templates
         .into_iter()
-        .map(|(id, name, description)| TemplateInfo {
+        .map(|(id, name, description, is_custom)| TemplateInfo {
             id,
             name,
             description,
+            is_custom,
         })
         .collect();
 
@@ -62,12 +75,6 @@ pub async fn api_list_templates<R: Runtime>(
 }
 
 /// Gets detailed information about a specific template
-///
-/// # Arguments
-/// * `template_id` - Template identifier (e.g., "daily_standup")
-///
-/// # Returns
-/// TemplateDetails with full template structure
 #[tauri::command]
 pub async fn api_get_template_details<R: Runtime>(
     _app: tauri::AppHandle<R>,
@@ -76,18 +83,26 @@ pub async fn api_get_template_details<R: Runtime>(
     info!("api_get_template_details called for template_id: {}", template_id);
 
     let template = templates::get_template(&template_id)?;
+    let is_custom = templates::is_custom_template(&template_id);
 
-    let section_titles: Vec<String> = template
+    let sections: Vec<TemplateSectionInfo> = template
         .sections
         .iter()
-        .map(|section| section.title.clone())
+        .map(|section| TemplateSectionInfo {
+            title: section.title.clone(),
+            instruction: section.instruction.clone(),
+            format: section.format.clone(),
+            item_format: section.item_format.clone(),
+            example_item_format: section.example_item_format.clone(),
+        })
         .collect();
 
     let details = TemplateDetails {
         id: template_id,
         name: template.name,
         description: template.description,
-        sections: section_titles,
+        is_custom,
+        sections,
     };
 
     info!("Retrieved template details for '{}'", details.name);
@@ -96,14 +111,6 @@ pub async fn api_get_template_details<R: Runtime>(
 }
 
 /// Validates a custom template JSON string
-///
-/// Useful for template editor UI or validation before saving custom templates
-///
-/// # Arguments
-/// * `template_json` - Raw JSON string of the template
-///
-/// # Returns
-/// Ok(template_name) if valid, Err(error_message) if invalid
 #[tauri::command]
 pub async fn api_validate_template<R: Runtime>(
     _app: tauri::AppHandle<R>,
@@ -123,17 +130,109 @@ pub async fn api_validate_template<R: Runtime>(
     }
 }
 
+/// Sanitize a template ID to only allow safe characters
+fn sanitize_template_id(id: &str) -> Result<String, String> {
+    let sanitized: String = id.chars()
+        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_')
+        .collect();
+
+    if sanitized.is_empty() {
+        return Err("Template ID must contain at least one valid character (a-z, 0-9, _)".to_string());
+    }
+
+    if sanitized != id {
+        return Err(format!(
+            "Template ID contains invalid characters. Only lowercase letters, digits, and underscores are allowed. Suggested: '{}'",
+            sanitized
+        ));
+    }
+
+    Ok(sanitized)
+}
+
+/// Save a custom template
+#[tauri::command]
+pub async fn api_save_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+    template_json: String,
+) -> Result<(), String> {
+    info!("api_save_template called for template_id: {}", template_id);
+
+    // Sanitize the template ID
+    let safe_id = sanitize_template_id(&template_id)?;
+
+    // Validate the template JSON
+    templates::validate_and_parse_template(&template_json)?;
+
+    // Get custom templates directory
+    let custom_dir = templates::get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+
+    // Create directory if it doesn't exist
+    std::fs::create_dir_all(&custom_dir)
+        .map_err(|e| format!("Failed to create custom templates directory: {}", e))?;
+
+    // Write the template file
+    let template_path = custom_dir.join(format!("{}.json", safe_id));
+    std::fs::write(&template_path, &template_json)
+        .map_err(|e| format!("Failed to write template file: {}", e))?;
+
+    info!("Saved custom template '{}' to {:?}", safe_id, template_path);
+
+    Ok(())
+}
+
+/// Delete a custom template
+#[tauri::command]
+pub async fn api_delete_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<(), String> {
+    info!("api_delete_template called for template_id: {}", template_id);
+
+    // Sanitize the template ID
+    let safe_id = sanitize_template_id(&template_id)?;
+
+    // Verify it's a custom template
+    if !templates::is_custom_template(&safe_id) {
+        return Err(format!("Template '{}' is not a custom template and cannot be deleted", safe_id));
+    }
+
+    // Get the file path
+    let custom_dir = templates::get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+    let template_path = custom_dir.join(format!("{}.json", safe_id));
+
+    // Delete the file
+    std::fs::remove_file(&template_path)
+        .map_err(|e| format!("Failed to delete template file: {}", e))?;
+
+    info!("Deleted custom template '{}' from {:?}", safe_id, template_path);
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_list_templates() {
-        // This test requires the templates to be embedded/available
-        // In a real test environment, you might want to mock the templates module
+    #[test]
+    fn test_sanitize_template_id_valid() {
+        assert_eq!(sanitize_template_id("my_template_1").unwrap(), "my_template_1");
+    }
 
-        // For now, just verify the function compiles and runs
-        // You can expand this with more specific assertions
+    #[test]
+    fn test_sanitize_template_id_invalid_chars() {
+        assert!(sanitize_template_id("my-template").is_err());
+        assert!(sanitize_template_id("../hack").is_err());
+        assert!(sanitize_template_id("My Template").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_template_id_empty() {
+        assert!(sanitize_template_id("").is_err());
+        assert!(sanitize_template_id("...").is_err());
     }
 
     #[tokio::test]
@@ -151,8 +250,6 @@ mod tests {
             ]
         }"#;
 
-        // Mock app handle would be needed for actual testing
-        // For now, test the validation logic directly
         let result = templates::validate_and_parse_template(valid_json);
         assert!(result.is_ok());
     }

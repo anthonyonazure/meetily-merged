@@ -46,6 +46,8 @@ pub use loader::{
     get_template, list_template_ids, list_templates, set_bundled_templates_dir,
     validate_and_parse_template,
 };
+// Re-export crate-internal API
+pub(crate) use loader::{get_custom_templates_dir, is_custom_template};
 pub use types::{Template, TemplateSection};
 
 #[cfg(test)]
@@ -74,7 +76,7 @@ mod tests {
         let templates = list_templates();
         assert!(!templates.is_empty());
 
-        for (id, name, description) in templates {
+        for (id, name, description, _is_custom) in templates {
             assert!(!id.is_empty());
             assert!(!name.is_empty());
             assert!(!description.is_empty());

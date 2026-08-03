@@ -14,9 +14,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { TemplateManagerDialog } from '@/components/TemplateManagerDialog';
 import { Sparkles, Settings, Loader2, FileText, Check, Square } from 'lucide-react';
+import type { TemplateDetails, TemplateSectionInfo } from '@/hooks/meeting-details/useTemplates';
 
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
@@ -33,9 +36,12 @@ interface SummaryGeneratorButtonGroupProps {
   onStopGeneration: () => void;
   customPrompt: string;
   summaryStatus: 'idle' | 'processing' | 'summarizing' | 'regenerating' | 'completed' | 'error';
-  availableTemplates: Array<{ id: string, name: string, description: string }>;
+  availableTemplates: Array<{ id: string, name: string, description: string, is_custom: boolean }>;
   selectedTemplate: string;
   onTemplateSelect: (templateId: string, templateName: string) => void;
+  onFetchTemplateDetails?: (templateId: string) => Promise<TemplateDetails>;
+  onSaveTemplate?: (templateId: string, data: { name: string; description: string; sections: TemplateSectionInfo[] }) => Promise<void>;
+  onDeleteTemplate?: (templateId: string) => Promise<void>;
   hasTranscripts?: boolean;
   hasSummary?: boolean;
   isModelConfigLoading?: boolean;
@@ -53,6 +59,9 @@ export function SummaryGeneratorButtonGroup({
   availableTemplates,
   selectedTemplate,
   onTemplateSelect,
+  onFetchTemplateDetails,
+  onSaveTemplate,
+  onDeleteTemplate,
   hasTranscripts = true,
   hasSummary = false,
   isModelConfigLoading = false,
@@ -61,6 +70,7 @@ export function SummaryGeneratorButtonGroup({
 }: SummaryGeneratorButtonGroupProps) {
   const [isCheckingModels, setIsCheckingModels] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
 
   // Expose the function to open the modal via callback registration
   useEffect(() => {
@@ -246,6 +256,7 @@ export function SummaryGeneratorButtonGroup({
     availableTemplates.find((t) => t.id === selectedTemplate)?.name ?? 'Template';
 
   return (
+    <>
     <ButtonGroup>
       {/* Generate Summary or Stop button */}
       {isGenerating ? (
@@ -351,10 +362,29 @@ export function SummaryGeneratorButtonGroup({
                 )}
               </DropdownMenuItem>
             ))}
-
+            {onFetchTemplateDetails && onSaveTemplate && onDeleteTemplate && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>
+                  Manage Templates...
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
     </ButtonGroup>
+      {/* Template Manager Dialog - must be outside ButtonGroup to avoid layout issues */}
+      {onFetchTemplateDetails && onSaveTemplate && onDeleteTemplate && (
+        <TemplateManagerDialog
+          open={templateManagerOpen}
+          onOpenChange={setTemplateManagerOpen}
+          templates={availableTemplates}
+          onFetchDetails={onFetchTemplateDetails}
+          onSave={onSaveTemplate}
+          onDelete={onDeleteTemplate}
+        />
+      )}
+    </>
   );
 }

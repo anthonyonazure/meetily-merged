@@ -55,9 +55,12 @@ interface SummaryPanelProps {
   summaryError: string | null;
   onRegenerateSummary: () => Promise<void>;
   getSummaryStatusMessage: (status: 'idle' | 'processing' | 'summarizing' | 'regenerating' | 'completed' | 'error') => string;
-  availableTemplates: Array<{ id: string, name: string, description: string }>;
+  availableTemplates: Array<{ id: string, name: string, description: string, is_custom: boolean }>;
   selectedTemplate: string;
   onTemplateSelect: (templateId: string, templateName: string) => void;
+  onFetchTemplateDetails?: (templateId: string) => Promise<any>;
+  onSaveTemplate?: (templateId: string, data: any) => Promise<void>;
+  onDeleteTemplate?: (templateId: string) => Promise<void>;
   isModelConfigLoading?: boolean;
   onOpenModelSettings?: (openFn: () => void) => void;
 }
@@ -94,6 +97,9 @@ export function SummaryPanel({
   availableTemplates,
   selectedTemplate,
   onTemplateSelect,
+  onFetchTemplateDetails,
+  onSaveTemplate,
+  onDeleteTemplate,
   isModelConfigLoading = false,
   onOpenModelSettings
 }: SummaryPanelProps) {
@@ -279,6 +285,9 @@ export function SummaryPanel({
                 availableTemplates={availableTemplates}
                 selectedTemplate={selectedTemplate}
                 onTemplateSelect={onTemplateSelect}
+                onFetchTemplateDetails={onFetchTemplateDetails}
+                onSaveTemplate={onSaveTemplate}
+                onDeleteTemplate={onDeleteTemplate}
                 hasTranscripts={transcripts.length > 0}
                 hasSummary={!!aiSummary}
                 isModelConfigLoading={isModelConfigLoading}
@@ -321,6 +330,9 @@ export function SummaryPanel({
               availableTemplates={availableTemplates}
               selectedTemplate={selectedTemplate}
               onTemplateSelect={onTemplateSelect}
+              onFetchTemplateDetails={onFetchTemplateDetails}
+              onSaveTemplate={onSaveTemplate}
+              onDeleteTemplate={onDeleteTemplate}
               hasTranscripts={transcripts.length > 0}
               isModelConfigLoading={isModelConfigLoading}
               onOpenModelSettings={onOpenModelSettings}
@@ -349,6 +361,9 @@ export function SummaryPanel({
               availableTemplates={availableTemplates}
               selectedTemplate={selectedTemplate}
               onTemplateSelect={onTemplateSelect}
+              onFetchTemplateDetails={onFetchTemplateDetails}
+              onSaveTemplate={onSaveTemplate}
+              onDeleteTemplate={onDeleteTemplate}
               hasTranscripts={transcripts.length > 0}
               hasSummary={false}
               isModelConfigLoading={isModelConfigLoading}

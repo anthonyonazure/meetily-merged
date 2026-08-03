@@ -22,7 +22,7 @@ pub fn set_bundled_templates_dir(path: PathBuf) {
 /// - macOS: ~/Library/Application Support/Meetily/templates/
 /// - Windows: %APPDATA%\Meetily\templates\
 /// - Linux: ~/.config/Meetily/templates/
-fn get_custom_templates_dir() -> Option<PathBuf> {
+pub(crate) fn get_custom_templates_dir() -> Option<PathBuf> {
     let mut path = dirs::data_dir()?;
     path.push("Meetily");
     path.push("templates");
@@ -197,16 +197,29 @@ pub fn list_template_ids() -> Vec<String> {
     ids
 }
 
+/// Check if a template is a custom (user-created) template
+///
+/// Returns true if the template file exists in the custom templates directory
+pub(crate) fn is_custom_template(id: &str) -> bool {
+    if let Some(custom_dir) = get_custom_templates_dir() {
+        let template_path = custom_dir.join(format!("{}.json", id));
+        template_path.exists()
+    } else {
+        false
+    }
+}
+
 /// List all available templates with their metadata
 ///
-/// Returns a list of (id, name, description) tuples
-pub fn list_templates() -> Vec<(String, String, String)> {
+/// Returns a list of (id, name, description, is_custom) tuples
+pub fn list_templates() -> Vec<(String, String, String, bool)> {
     let mut templates = Vec::new();
 
     for id in list_template_ids() {
         match get_template(&id) {
             Ok(template) => {
-                templates.push((id, template.name, template.description));
+                let is_custom = is_custom_template(&id);
+                templates.push((id, template.name, template.description, is_custom));
             }
             Err(e) => {
                 warn!("Failed to load template '{}': {}", id, e);
