@@ -25,7 +25,20 @@ import { RecordingPostProcessingProvider } from '@/contexts/RecordingPostProcess
 import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
 import { ImportDialogProvider } from '@/contexts/ImportDialogContext'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
+import { ThemeProvider, THEME_STORAGE_KEY } from '@/contexts/ThemeContext'
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats'
+
+// Runs before hydration so the window never flashes the wrong theme.
+// Mirrors the resolution logic in ThemeContext (localStorage fast copy).
+const themeInitScript = `(function () {
+  try {
+    var p = localStorage.getItem('${THEME_STORAGE_KEY}');
+    var dark = p === 'dark' ||
+      ((p === null || p === 'system') &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.documentElement.classList.add('dark');
+  } catch (e) {}
+})();`
 
 
 const sourceSans3 = Source_Sans_3({
@@ -296,8 +309,13 @@ export default function RootLayout({
   if (isOverlayWindow) {
     return (
       <html lang="en" style={{ background: 'transparent' }}>
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        </head>
         <body className={`${sourceSans3.variable} font-sans antialiased`} style={{ background: 'transparent' }}>
-          {children}
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
           <Toaster position="bottom-right" />
         </body>
       </html>
@@ -307,6 +325,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Frontend crash reporter, dev only.
 
             A failure during hydration leaves no trace anywhere we can see: the Rust log
@@ -340,6 +359,7 @@ export default function RootLayout({
         )}
       </head>
       <body className={`${sourceSans3.variable} font-sans antialiased`}>
+        <ThemeProvider>
         <AppErrorBoundary>
         <RecordingStateProvider>
             <TranscriptProvider>
@@ -389,6 +409,7 @@ export default function RootLayout({
             </TranscriptProvider>
           </RecordingStateProvider>
         </AppErrorBoundary>
+        </ThemeProvider>
 
         {/* Bottom-right: bottom-center sat directly on top of the input box below the
             transcript, so a toast blocked the very control the user reaches for next. */}

@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from "react"
 import { Switch } from "./ui/switch"
-import { FolderOpen, Download } from "lucide-react"
+import { FolderOpen, Download, Monitor, Sun, Moon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { useConfig } from "@/contexts/ConfigContext"
+import { useTheme, type ThemePreference } from "@/contexts/ThemeContext"
 import { toast } from "sonner"
+
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Ledger', icon: Sun },
+  { value: 'dark', label: 'After hours', icon: Moon },
+]
 
 export function PreferenceSettings() {
   const {
@@ -13,6 +20,7 @@ export function PreferenceSettings() {
     isLoadingPreferences,
     loadPreferences,
   } = useConfig();
+  const { preference: themePreference, setPreference: setThemePreference } = useTheme();
 
   const [showRecordingReminder, setShowRecordingReminder] = useState<boolean | null>(null);
   const [detectByRunningApps, setDetectByRunningApps] = useState<boolean>(false);
@@ -138,6 +146,31 @@ export function PreferenceSettings() {
 
   return (
     <div className="space-y-6">
+      {/* Appearance Section */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Appearance</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Choose the Ledger look: follow your system, or force light or dark.
+        </p>
+        <div className="flex gap-2">
+          {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setThemePreference(value)}
+              aria-pressed={themePreference === value}
+              className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md border transition-colors ${
+                themePreference === value
+                  ? 'bg-active border-faint text-ink font-medium'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* In-app Recording Reminder Section */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center justify-between">
