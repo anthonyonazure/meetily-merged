@@ -87,11 +87,16 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     await savePreferences(newPreferences);
   };
 
-  const handleVadRedemptionChange = async (ms: number) => {
+  // Dragging updates local state only — the value must track the thumb without a
+  // round-trip to the backend on every tick.
+  const handleVadRedemptionInput = (ms: number) => {
     const clamped = Math.min(VAD_REDEMPTION_MAX_MS, Math.max(VAD_REDEMPTION_MIN_MS, ms));
-    const newPreferences = { ...preferences, vad_redemption_ms: clamped };
-    setPreferences(newPreferences);
-    await savePreferences(newPreferences);
+    setPreferences((prev) => ({ ...prev, vad_redemption_ms: clamped }));
+  };
+
+  // Persist once, when the drag ends. Silently: a slider does not warrant a toast.
+  const handleVadRedemptionCommit = async () => {
+    await savePreferences(preferences, { silent: true });
   };
 
   const handleDeviceChange = async (devices: SelectedDevices) => {
@@ -128,11 +133,16 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
     }
   };
 
-  const savePreferences = async (prefs: RecordingPreferences) => {
-    setSaving(true);
+  const savePreferences = async (prefs: RecordingPreferences, options?: { silent?: boolean }) => {
+    // `silent` saves do not flip `saving`. Disabling a control mid-drag makes the
+    // browser abort the drag and drop focus, which scrolled the settings page back to
+    // the top the moment you touched the slider.
+    if (!options?.silent) setSaving(true);
     try {
       await invoke('set_recording_preferences', { preferences: prefs });
       onSave?.(prefs);
+
+      if (options?.silent) return;
 
       // Show success toast with device details
       const micDevice = prefs.preferred_mic_device || 'Default';
@@ -146,7 +156,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
         description: error instanceof Error ? error.message : String(error)
       });
     } finally {
-      setSaving(false);
+      if (!options?.silent) setSaving(false);
     }
   };
 
@@ -271,9 +281,11 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
             max={VAD_REDEMPTION_MAX_MS}
             step={10}
             value={preferences.vad_redemption_ms}
-            disabled={saving}
-            onChange={(e) => handleVadRedemptionChange(Number(e.target.value))}
-            className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600 disabled:cursor-not-allowed"
+            onChange={(e) => handleVadRedemptionInput(Number(e.target.value))}
+            onPointerUp={handleVadRedemptionCommit}
+            onKeyUp={handleVadRedemptionCommit}
+            onClick={(e) => e.preventDefault()}
+            className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600"
           />
           <span className="w-20 shrink-0 text-right text-sm font-medium tabular-nums text-gray-900">
             {preferences.vad_redemption_ms} ms
