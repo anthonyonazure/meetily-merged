@@ -70,6 +70,7 @@ export default function RootLayout({
 }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [onboardingCheckDone, setOnboardingCheckDone] = useState(false)
 
   // Import audio state
   const [showDropOverlay, setShowDropOverlay] = useState(false)
@@ -77,25 +78,54 @@ export default function RootLayout({
   const [importFilePath, setImportFilePath] = useState<string | null>(null)
 
   useEffect(() => {
-    // Check onboarding status first
-    invoke<{ completed: boolean } | null>('get_onboarding_status')
-      .then((status) => {
-        const isComplete = status?.completed ?? false
-        setOnboardingCompleted(isComplete)
+    let cancelled = false
 
-        if (!isComplete) {
-          console.log('[Layout] Onboarding not completed, showing onboarding flow')
-          setShowOnboarding(true)
-        } else {
-          console.log('[Layout] Onboarding completed, showing main app')
+    const checkOnboarding = async () => {
+      // Try invoke with a timeout: in dev mode, Tauri IPC may not be ready yet
+      const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+        ])
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return
+        try {
+          const status = await withTimeout(
+            invoke<{ completed: boolean } | null>('get_onboarding_status'),
+            3000
+          )
+          if (cancelled) return
+          const isComplete = status?.completed ?? false
+          setOnboardingCompleted(isComplete)
+
+          if (!isComplete) {
+            console.log('[Layout] Onboarding not completed, showing onboarding flow')
+            setShowOnboarding(true)
+          } else {
+            console.log('[Layout] Onboarding completed, showing main app')
+          }
+          setOnboardingCheckDone(true)
+          return
+        } catch (error) {
+          console.warn(`[Layout] Onboarding check attempt ${attempt + 1}/3 failed:`, error)
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 500))
+          }
         }
-      })
-      .catch((error) => {
-        console.error('[Layout] Failed to check onboarding status:', error)
-        // Default to showing onboarding if we can't check
+      }
+
+      // All retries failed: show onboarding as fallback
+      if (!cancelled) {
+        console.error('[Layout] All retries exhausted, showing onboarding as fallback')
         setShowOnboarding(true)
         setOnboardingCompleted(false)
-      })
+        setOnboardingCheckDone(true)
+      }
+    }
+
+    checkOnboarding()
+    return () => { cancelled = true }
   }, [])
 
   // Disable context menu in production
@@ -280,8 +310,15 @@ export default function RootLayout({
                               {/* Download progress toast provider - listens for background downloads */}
                               <DownloadProgressToastProvider />
 
-                              {/* Show onboarding or main app */}
-                              {showOnboarding ? (
+                              {/* Show loading, onboarding, or main app */}
+                              {!onboardingCheckDone ? (
+                                <div className="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
+                                  <div className="text-center space-y-3">
+                                    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin mx-auto" />
+                                    <p className="text-sm text-gray-500">Loading...</p>
+                                  </div>
+                                </div>
+                              ) : showOnboarding ? (
                                 <OnboardingFlow onComplete={handleOnboardingComplete} />
                               ) : (
                                 <div className="flex">

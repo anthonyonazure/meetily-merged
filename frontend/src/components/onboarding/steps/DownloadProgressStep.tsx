@@ -339,11 +339,6 @@ export function DownloadProgressStep() {
           status: 'completed',
           progress: 100,
         }));
-      } else if (!actuallyAvailable && parakeetState.status === 'error') {
-        toast.error('Transcription engine required', {
-          description: 'Please retry the download before continuing.',
-        });
-        return;
       }
     } catch (error) {
       console.warn('[DownloadProgressStep] Failed to verify model:', error);
@@ -353,10 +348,10 @@ export function DownloadProgressStep() {
     const downloadsComplete = parakeetState.status === 'completed' &&
       summaryState.status === 'completed';
 
-    // Show toast if downloads still in progress
+    // Show toast if downloads still in progress or skipped
     if (!downloadsComplete) {
-      toast.info('Downloads will continue in the background', {
-        description: 'You can start using the app. Recording will be available once speech recognition is ready.',
+      toast.info('You can configure transcription models in Settings', {
+        description: 'Go to Settings > Transcription to download and select your preferred model.',
         duration: 5000,
       });
     }
@@ -518,7 +513,7 @@ export function DownloadProgressStep() {
         </AnimatePresence>
 
         {/* Continue Button */}
-        <div className="w-full max-w-xs">
+        <div className="w-full max-w-xs space-y-2">
           <Button
             onClick={handleContinue}
             disabled={!parakeetDownloaded || isCompleting}
@@ -530,6 +525,15 @@ export function DownloadProgressStep() {
               'Continue'
             )}
           </Button>
+          {!parakeetDownloaded && (
+            <button
+              onClick={handleContinue}
+              disabled={isCompleting}
+              className="w-full text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
+            >
+              Skip downloads, I&apos;ll configure models later
+            </button>
+          )}
         </div>
       </div>
     </OnboardingContainer>
