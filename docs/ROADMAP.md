@@ -9,9 +9,9 @@ Owner: Anthony (anthonyonazure). Working doc; Oscar executes, this file tracks o
 
 ## Wave 2 — PRO-gap features (build ourselves, no fork has them)
 
-3. **Chat with meetings**: ask questions across one or all meetings, local LLM, transcript+summary retrieval. Implemented as the fourth agent in the agents library plus a chat panel.
-4. **PDF / DOCX export**: extend the existing Markdown export; PDF via webview print pipeline, DOCX via docx generation in Rust or a zero-dep JS lib.
-5. **Calendar integration v1 (local-first)**: read the OS calendar (macOS EventKit; Windows later) — upcoming meetings listed in-app, meeting names prefilled, auto-start prompt at event time. No OAuth needed when Outlook/Google calendars already sync to the OS calendar.
+3. **Chat with meetings** — SHIPPED 2026-08-03: chat panel in meeting details with "This meeting" and "All meetings" scopes, grounded in transcript+summary via the configured summary LLM. Built as its own module, not a fourth agents-registry entry: the registry models one-shot runs with stored output, chat is interactive multi-turn (decision logged in src-tauri/src/chat/mod.rs).
+4. **PDF / DOCX export** — SHIPPED 2026-08-03: DOCX via pure-Rust docx-rs; PDF as print-styled HTML opened in the browser for print-to-PDF (pure-Rust PDF crates rejected for Unicode reasons; rationale in src-tauri/src/export/html.rs).
+5. **Calendar integration v1 (local-first)** — SHIPPED 2026-08-03 (macOS): EventKit read-only, Upcoming section in sidebar, meeting-name prefill on click, Join button for Zoom/Teams/Meet/Webex links. TODO not shipped: auto-start prompt (notification at event start) needs a scheduler loop plus dedupe on top of the notifications module and was cut from v1; Windows calendar remains Wave 4 territory.
 
 ## Wave 3 — integrations (explicit opt-in, each sends data OUT only on user action)
 

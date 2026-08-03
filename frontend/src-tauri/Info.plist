@@ -10,6 +10,10 @@
     <string>This application needs permission to capture system audio output for meeting transcription and recording.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>This application needs Automation permission to paste transcribed text into the active app.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Meetily reads your calendar to list upcoming meetings, prefill meeting names, and offer one-click joins for meeting links. Nothing is written to your calendar.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Meetily reads your calendar to list upcoming meetings, prefill meeting names, and offer one-click joins for meeting links. Nothing is written to your calendar.</string>
     <key>com.apple.security.device.audio-input</key>
     <true/>
 </dict>

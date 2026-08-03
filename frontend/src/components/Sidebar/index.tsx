@@ -30,6 +30,7 @@ import { MessageToast } from '../MessageToast';
 import Logo from '../Logo';
 import Info from '../Info';
 import { ComplianceNotification } from '../ComplianceNotification';
+import { UpcomingEvents } from './UpcomingEvents';
 import { Input } from '../ui/input';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../ui/input-group';
 
@@ -753,6 +754,7 @@ const Sidebar: React.FC = () => {
                   <ListChecks className="w-4 h-4 mr-2" />
                   <span>Actions</span>
                 </div>
+                <UpcomingEvents />
               </>
             )}
           </div>

@@ -202,6 +202,9 @@ cidre = { git = "https://github.com/yury/cidre", rev = "a9587fa", features = ["a
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-user-notifications = "0.3"
+# Calendar v1: read the macOS system calendar via EventKit (src/calendar).
+# Default features kept: they only add generated bindings, no runtime cost.
+objc2-event-kit = "=0.3.2"
 block2 = "0.6"
 dasp = "0.11.0"
 futures-channel = "0.3.31"

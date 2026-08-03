@@ -156,6 +156,7 @@ pub(crate) use perf_trace;
 pub mod agents;
 pub mod api;
 pub mod audio;
+pub mod calendar;
 pub mod chat;
 pub mod config;
 pub mod console_utils;
@@ -793,6 +794,10 @@ pub fn run() {
             chat::commands::chat_send,
             chat::commands::chat_history,
             chat::commands::chat_clear,
+            // Calendar commands (macOS EventKit; clear error elsewhere)
+            calendar::calendar_permission_status,
+            calendar::calendar_request_access,
+            calendar::calendar_upcoming_events,
             // Template commands
             summary::template_commands::api_list_templates,
             summary::template_commands::api_get_template_details,
