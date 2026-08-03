@@ -1,0 +1,35 @@
+# Roadmap — meetily-merged
+
+Owner: Anthony (anthonyonazure). Working doc; Oscar executes, this file tracks order and scope.
+
+## Wave 1 — fork feature parity (in flight)
+
+1. **Speaker diarization** (from mimi202605, audited CLEAN 2026-08-03): on-device CAM++ voiceprint separation, Speaker 1/2/3 labels refining the existing You/Others channel labels, color-coded transcript. Port scope = diarization engine + alignment + trigger + UI; strip Chinese proxy mirrors (official k2-fsa URLs + SHA256 pin), build sherpa libs from source (no bundled DLL blobs), no SenseVoice ASR, no i18n. Voiceprint naming across meetings = Wave 3.
+2. **MaxwellJryao features** (audited CLEAN 2026-08-03): Qwen3-ASR engine (pin vendor lib commit; note community GGUF provenance), template management UI, ASR error correction prompts (English examples), detailed-discussion template, OpenAI API transcription, VAD timestamp fix + onboarding deadlock fix if not already covered. Dictation (macOS push-to-talk paste) ports WITH the debug keystroke buffer stripped.
+
+## Wave 2 — PRO-gap features (build ourselves, no fork has them)
+
+3. **Chat with meetings**: ask questions across one or all meetings, local LLM, transcript+summary retrieval. Implemented as the fourth agent in the agents library plus a chat panel.
+4. **PDF / DOCX export**: extend the existing Markdown export; PDF via webview print pipeline, DOCX via docx generation in Rust or a zero-dep JS lib.
+5. **Calendar integration v1 (local-first)**: read the OS calendar (macOS EventKit; Windows later) — upcoming meetings listed in-app, meeting names prefilled, auto-start prompt at event time. No OAuth needed when Outlook/Google calendars already sync to the OS calendar.
+
+## Wave 3 — integrations (explicit opt-in, each sends data OUT only on user action)
+
+6. **M365/Outlook**: Graph OAuth (device code or loopback) — calendar read direct from tenant, and "email summary via Outlook" as an explicit share action. Needs an Entra app registration in Anthony's tenant (his action).
+7. **Google Workspace**: Calendar read + Gmail draft share action. Needs a Google Cloud OAuth client (his action).
+8. **Zoom / Teams / Slack**:
+   - Detection: meeting auto-detect already catches them (mic-activity + process-name detection once Maxwell port lands).
+   - Auto-join: open the meeting link from the calendar event at start time.
+   - Share: post summary to a Slack channel / Teams chat as an explicit per-meeting action (webhook or API token, stored in keychain).
+9. **Voiceprint speaker naming** (mimi Layer B): remember known voices so "Speaker 2" becomes "Dana" automatically in future meetings.
+
+## Wave 4 — platform
+
+10. **Windows (PC) support**: CI build already exists; first dispatch running. Fix what fails; dictation and diarization need Windows-path work (CGEventTap and ScreenCaptureKit equivalents differ).
+11. **UI redesign**: four directions mocked (Phosphor terminal, Ledger client-facing, Console Pro dark ops, Slate light dense) — awaiting Anthony's reactions; winner becomes a theme system, ideally shipping 2+ skins since variants share structure.
+
+## Standing rules
+
+- Any fork code merges only after a line-by-line security audit (five forks audited to date, all clean; every fork's auto-updater repoint stripped).
+- Privacy contract: processing local or user-configured endpoints only; anything outbound (email, Slack, Teams) is an explicit per-use user action, never automatic.
+- Update channel decision still open: own signed feed (key exists in 1Password) vs disabled updater.
