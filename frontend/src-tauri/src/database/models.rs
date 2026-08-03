@@ -148,6 +148,18 @@ pub struct ActionItemWithMeeting {
     pub meeting_title: String,
 }
 
+/// One stored chat message. `meeting_id` is None for the "all meetings" scope.
+/// Named `ChatMessageRecord` to avoid colliding with the LLM request struct
+/// `summary::llm_client::ChatMessage`.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ChatMessageRecord {
+    pub id: String,
+    pub meeting_id: Option<String>,
+    pub role: String,
+    pub content: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AgentSettingRow {
     pub agent_id: String,

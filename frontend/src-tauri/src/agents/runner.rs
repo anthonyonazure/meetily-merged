@@ -19,19 +19,21 @@ use std::path::PathBuf;
 use tracing::{error, info, warn};
 
 /// Everything needed to talk to the configured LLM provider.
-struct LlmSettings {
-    provider: LLMProvider,
-    api_key: String,
-    ollama_endpoint: Option<String>,
-    custom_openai_endpoint: Option<String>,
-    max_tokens: Option<u32>,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
+/// Shared with the chat feature (`crate::chat`), which resolves providers the
+/// same way agents do.
+pub(crate) struct LlmSettings {
+    pub(crate) provider: LLMProvider,
+    pub(crate) api_key: String,
+    pub(crate) ollama_endpoint: Option<String>,
+    pub(crate) custom_openai_endpoint: Option<String>,
+    pub(crate) max_tokens: Option<u32>,
+    pub(crate) temperature: Option<f32>,
+    pub(crate) top_p: Option<f32>,
 }
 
 /// Resolves provider credentials/endpoints from the settings table, mirroring
 /// the resolution done for summary generation in `summary::service`.
-async fn resolve_llm_settings(
+pub(crate) async fn resolve_llm_settings(
     pool: &SqlitePool,
     model_provider: &str,
 ) -> Result<LlmSettings, String> {

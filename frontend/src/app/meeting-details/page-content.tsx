@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { TranscriptPanel } from '@/components/MeetingDetails/TranscriptPanel';
 import { SummaryPanel } from '@/components/MeetingDetails/SummaryPanel';
 import { AgentsPanel } from '@/components/MeetingDetails/AgentsPanel';
+import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 
 // Custom hooks
@@ -259,6 +260,7 @@ export default function PageContent({
             onOpenModelSettings={handleRegisterModalOpen}
           />
           <AgentsPanel meetingId={meeting.id} />
+          <ChatPanel meetingId={meeting.id} />
         </div>
       </div>
     </motion.div>

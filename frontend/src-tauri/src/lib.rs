@@ -156,6 +156,7 @@ pub(crate) use perf_trace;
 pub mod agents;
 pub mod api;
 pub mod audio;
+pub mod chat;
 pub mod config;
 pub mod console_utils;
 pub mod database;
@@ -788,6 +789,10 @@ pub fn run() {
             agents::commands::actions_for_meeting,
             agents::commands::action_set_status,
             agents::commands::action_delete,
+            // Chat with meetings commands
+            chat::commands::chat_send,
+            chat::commands::chat_history,
+            chat::commands::chat_clear,
             // Template commands
             summary::template_commands::api_list_templates,
             summary::template_commands::api_get_template_details,
