@@ -1194,13 +1194,28 @@ pub async fn debug_backend_connection<R: Runtime>(app: AppHandle<R>) -> Result<S
 pub async fn open_external_url(url: String) -> Result<(), String> {
     use std::process::Command;
 
+    // Only open real web URLs. Anything else (file paths, custom schemes,
+    // strings crafted to reach a shell) is rejected before spawning anything.
+    let parsed = url::Url::parse(url.trim()).map_err(|e| format!("Invalid URL: {}", e))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("Refusing to open URL with scheme '{}'", other)),
+    }
+    let safe_url = parsed.as_str();
+
     let result = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(&["/C", "start", &url]).output()
+        // Never route the URL through `cmd /C start`: cmd re-parses its command
+        // line, so metacharacters like `&` in a query string would be executed
+        // as commands. rundll32's FileProtocolHandler receives the URL as a
+        // plain process argument with no shell involved.
+        Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", safe_url])
+            .output()
     } else if cfg!(target_os = "macos") {
-        Command::new("open").arg(&url).output()
+        Command::new("open").arg(safe_url).output()
     } else {
         // Linux and other Unix-like systems
-        Command::new("xdg-open").arg(&url).output()
+        Command::new("xdg-open").arg(safe_url).output()
     };
 
     match result {
