@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Switch } from "./ui/switch"
-import { FolderOpen } from "lucide-react"
+import { FolderOpen, Download } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { useConfig } from "@/contexts/ConfigContext"
 import { toast } from "sonner"
@@ -15,6 +15,28 @@ export function PreferenceSettings() {
   } = useConfig();
 
   const [showRecordingReminder, setShowRecordingReminder] = useState<boolean | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportMarkdown = async () => {
+    setExporting(true);
+    try {
+      const result = await invoke<{ folder: string; exported: number; skipped: number }>(
+        'export_meetings_markdown',
+        { meetingIds: null }
+      );
+      toast.success(`Exported ${result.exported} meeting${result.exported === 1 ? '' : 's'} as Markdown`, {
+        description: result.folder,
+      });
+    } catch (error) {
+      // The Rust side reports a cancelled folder picker as "cancelled"; that is a user
+      // action, not a failure, so it must not raise an error toast.
+      if (String(error) === 'cancelled') return;
+      console.error('Export failed:', error);
+      toast.error('Export failed', { description: String(error) });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Lazy load storage-location preferences on mount (only loads if not already cached)
   useEffect(() => {
@@ -153,6 +175,23 @@ export function PreferenceSettings() {
             <strong>Note:</strong> Database and models are stored together in your application data directory for unified management.
           </p>
         </div>
+      </div>
+
+      {/* Export Section */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Export Meetings</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Save every meeting as a Markdown file (summary plus timestamped transcript) to a folder you choose. The database stays the source of truth.
+        </p>
+
+        <button
+          onClick={handleExportMarkdown}
+          disabled={exporting}
+          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Download className="w-4 h-4" />
+          {exporting ? 'Exporting…' : 'Export as Markdown'}
+        </button>
       </div>
 
     </div>
