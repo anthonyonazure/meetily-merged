@@ -9,16 +9,10 @@ use std::sync::Mutex as StdMutex;
 /// `plugins.updater.endpoints` — drift makes the report misleading.
 #[tauri::command]
 async fn debug_check_update() -> Result<String, String> {
-    const ENDPOINTS: &[(&str, &str)] = &[
-        (
-            "S3 (primary)",
-            "https://s3-dcl1.ethquokkaops.io/automation-public/meetily-updates/latest.json",
-        ),
-        (
-            "AzimovS GitHub Releases (fallback)",
-            "https://github.com/AzimovS/meetily/releases/latest/download/latest.json",
-        ),
-    ];
+    const ENDPOINTS: &[(&str, &str)] = &[(
+        "Zackriya GitHub Releases",
+        "https://github.com/Zackriya-Solutions/meeting-minutes/releases/latest/download/latest.json",
+    )];
     let current_version = env!("CARGO_PKG_VERSION");
 
     let client = reqwest::Client::builder()
