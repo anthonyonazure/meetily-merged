@@ -68,21 +68,46 @@ export function useAutoScroll({
     }, [scrollRef]);
 
     /**
+     * Hold the "this scroll is ours" flag until the animation actually finishes.
+     *
+     * A smooth scroll emits scroll events for several hundred milliseconds, and every
+     * intermediate position is *not* near the bottom. If the flag were cleared early,
+     * the scroll handler would read one of those positions, conclude the user had
+     * scrolled away, and switch auto-scroll off mid-animation — which would stop the
+     * transcript following the speaker after the very first line.
+     */
+    const settleProgrammaticScroll = useCallback(() => {
+        const element = scrollRef.current;
+        if (!element) return;
+
+        let timeout: ReturnType<typeof setTimeout>;
+        const done = () => {
+            isProgrammaticScrollRef.current = false;
+            element.removeEventListener("scrollend", done);
+            clearTimeout(timeout);
+        };
+
+        // `scrollend` is exact where supported; the timeout is the fallback for engines
+        // that do not have it.
+        element.addEventListener("scrollend", done, { once: true });
+        timeout = setTimeout(done, 800);
+    }, [scrollRef]);
+
+    /**
      * Scroll to bottom programmatically
      */
     const scrollToBottom = useCallback(() => {
         if (scrollRef.current) {
             isProgrammaticScrollRef.current = true;
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            scrollRef.current.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: "smooth",
+            });
             userScrolledRef.current = false;
             setAutoScroll(true);
-
-            // Reset the flag after a small delay to account for scroll event propagation
-            setTimeout(() => {
-                isProgrammaticScrollRef.current = false;
-            }, 50);
+            settleProgrammaticScroll();
         }
-    }, [scrollRef]);
+    }, [scrollRef, settleProgrammaticScroll]);
 
     // Handle scroll events to detect manual scrolling
     useEffect(() => {
@@ -154,27 +179,25 @@ export function useAutoScroll({
 
             isProgrammaticScrollRef.current = true;
 
+            // Animate rather than jump. This used to assign `scrollTop = scrollHeight`,
+            // which teleports the list. When several lines land at once the jump is
+            // proportionally larger and harsher.
             if (useVirtualization && virtualizer) {
-                // Use scrollToOffset with a large value to ensure we're at the bottom
                 const totalSize = virtualizer.getTotalSize();
-                virtualizer.scrollToOffset(totalSize + 1000, { align: "end" });
-
-                // Also set scrollTop directly as backup after virtualizer updates
-                setTimeout(() => {
-                    if (scrollRef.current) {
-                        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                    }
-                }, 50);
+                virtualizer.scrollToOffset(totalSize + 1000, {
+                    align: "end",
+                    behavior: "smooth",
+                });
             } else if (scrollRef.current) {
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                scrollRef.current.scrollTo({
+                    top: scrollRef.current.scrollHeight,
+                    behavior: "smooth",
+                });
             }
 
-            // Reset the flag after a longer delay for virtualization
-            setTimeout(() => {
-                isProgrammaticScrollRef.current = false;
-            }, 150);
+            settleProgrammaticScroll();
         }
-    }, [segments.length, isRecording, isPaused, useVirtualization, virtualizer, scrollRef, isNearBottom, disableAutoScroll]);
+    }, [segments.length, isRecording, isPaused, useVirtualization, virtualizer, scrollRef, isNearBottom, disableAutoScroll, settleProgrammaticScroll]);
 
     // Auto-scroll to active segment (when clicking on search results, etc.)
     useEffect(() => {

@@ -102,8 +102,13 @@ export function TranscriptPanel({
         </div>
       )}
 
-      {/* Transcript content */}
-      <div className="pb-20">
+      {/* Transcript content.
+          The bottom padding has to clear the recording controls, which float above this
+          panel (`fixed bottom-12` in page.tsx, ~64px tall, so their top edge sits ~112px
+          above the viewport bottom). pb-20 (80px) was less than that, so the last line —
+          the one the user is actually reading as it arrives — was clipped by the pill.
+          pb-40 (160px) leaves it a clear margin. */}
+      <div className="pb-40">
         <div className="flex justify-center">
           <div className="w-2/3 max-w-[750px]">
             <VirtualizedTranscriptView
