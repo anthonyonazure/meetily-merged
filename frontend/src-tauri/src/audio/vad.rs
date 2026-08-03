@@ -26,7 +26,21 @@ pub struct ContinuousVadProcessor {
     speech_start_sample: usize,
     // State tracking for smart logging
     last_logged_state: bool,
+    /// True once this speech run has been force-cut by the max-duration guard.
+    ///
+    /// The VAD session accumulates the *whole* run internally and hands it over on
+    /// SpeechEnd. If we have already emitted part of that run ourselves, taking the
+    /// session's samples would transcribe the same audio twice — so once we have cut,
+    /// we use our own remainder instead.
+    force_emitted_this_run: bool,
 }
+
+/// Longest stretch of unbroken speech that may accumulate before it is transcribed.
+///
+/// Silero only ends a segment on silence, so a speaker who does not pause produces no
+/// output at all — nothing reaches the model, and the screen stays empty until they
+/// finally stop. This bounds that wait.
+const MAX_SEGMENT_SAMPLES: usize = 16_000 * 5; // 5 seconds at 16kHz
 
 /// How long a silence must last before speech is considered finished, in ms.
 ///
@@ -107,6 +121,7 @@ impl ContinuousVadProcessor {
             speech_start_sample: 0,
             // Initialize state tracking
             last_logged_state: false,
+            force_emitted_this_run: false,
         })
     }
 
@@ -267,6 +282,7 @@ impl ContinuousVadProcessor {
                     // Use 16000 (VAD processing rate) since processed_samples counts 16kHz samples
                     self.speech_start_sample = self.processed_samples + (timestamp_ms * 16000 / 1000);
                     self.current_speech.clear();
+                    self.force_emitted_this_run = false;
                 }
                 VadTransition::SpeechEnd { start_timestamp_ms, end_timestamp_ms, samples } => {
                     // Only log if we were previously in speech state
@@ -276,8 +292,13 @@ impl ContinuousVadProcessor {
                     }
                     self.in_speech = false;
 
-                    // Use samples from VAD transition if available, otherwise use accumulated samples
-                    let speech_samples = if !samples.is_empty() {
+                    // Use samples from the VAD transition if available, otherwise our own
+                    // accumulation. But once this run has been force-cut, the session's
+                    // samples still contain the part we already emitted — taking them
+                    // would transcribe that audio a second time.
+                    let speech_samples = if self.force_emitted_this_run {
+                        self.current_speech.clone()
+                    } else if !samples.is_empty() {
                         samples
                     } else {
                         self.current_speech.clone()
@@ -305,6 +326,30 @@ impl ContinuousVadProcessor {
         // Accumulate speech if we're currently in a speech state
         if self.in_speech {
             self.current_speech.extend_from_slice(chunk);
+
+            // Force a cut if the speaker has not paused for a long time, so the
+            // transcript keeps appearing instead of waiting for them to stop.
+            if self.current_speech.len() >= MAX_SEGMENT_SAMPLES {
+                let emitted_len = self.current_speech.len();
+                let start_ms = (self.speech_start_sample as f64 / 16000.0) * 1000.0;
+                let end_ms = start_ms + (emitted_len as f64 / 16000.0) * 1000.0;
+
+                info!(
+                    "VAD: speech ran past {:.1}s without a pause — cutting so the transcript keeps up",
+                    MAX_SEGMENT_SAMPLES as f64 / 16000.0
+                );
+
+                self.speech_segments.push_back(SpeechSegment {
+                    samples: std::mem::take(&mut self.current_speech),
+                    start_timestamp_ms: start_ms,
+                    end_timestamp_ms: end_ms,
+                    confidence: 0.85,
+                });
+
+                // The next chunk of this run starts where this one ended.
+                self.speech_start_sample += emitted_len;
+                self.force_emitted_this_run = true;
+            }
         }
 
         self.processed_samples += chunk.len();

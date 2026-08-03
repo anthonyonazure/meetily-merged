@@ -265,13 +265,14 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
         </div>
       </div>
 
-      {/* Sentence segmentation */}
+      {/* Pause length. This is what decides when audio is sent to the model at all,
+          so it sets how quickly text appears — not just where a line breaks. */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Transcript line breaks
+          Pause before transcribing
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          How long a pause has to last before the transcript starts a new line. Shorter values split closer to sentence boundaries; longer values merge hesitant speech into one line. Applies to the next recording.
+          How long a silence must last before the line ends and the audio is transcribed. It sets both where lines break and how quickly text appears. Applies to the next recording.
         </p>
 
         <div className="flex items-center gap-4">
@@ -284,7 +285,6 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
             onChange={(e) => handleVadRedemptionInput(Number(e.target.value))}
             onPointerUp={handleVadRedemptionCommit}
             onKeyUp={handleVadRedemptionCommit}
-            onClick={(e) => e.preventDefault()}
             className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600"
           />
           <span className="w-20 shrink-0 text-right text-sm font-medium tabular-nums text-gray-900">
@@ -293,8 +293,8 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
         </div>
 
         <div className="mt-2 flex justify-between text-xs text-gray-400">
-          <span>More line breaks</span>
-          <span>Fewer line breaks</span>
+          <span>100 ms — faster, more splits</span>
+          <span>400 ms — slower, fewer splits</span>
         </div>
       </div>
     </div>
