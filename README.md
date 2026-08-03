@@ -44,7 +44,14 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 
 ---
 
-> **Meetily PRO Upgrade Offer** - Meetily PRO is available for users who need enhanced accuracy, advanced exports, custom summary workflows, and team-ready features. Use coupon code **LAUNCH20** for **20% off** until the next Meetily Community Edition release. Speaker diarization is also planned for PRO in mid-June. [Explore Meetily PRO →](https://meetily.ai/pro/)
+> **About this fork** — This is an enhanced, security-audited build of [Meetily](https://github.com/Zackriya-Solutions/meeting-minutes) (upstream v0.4.0) that merges the best community fork work into one tree. Every merged fork was independently audited line-by-line for malicious code before inclusion. On top of upstream:
+>
+> - **Meeting Agents (new):** a library of on-device AI agents — a Follow-up Drafter, an automatic Action Tracker with a cross-meeting actions view, and a Decision Log. All run through your configured local/model provider; nothing is ever sent anywhere. See [docs/AGENTS_DESIGN.md](docs/AGENTS_DESIGN.md).
+> - **Features** (from [AzimovS/meetily](https://github.com/AzimovS/meetily)): remote transcription provider with connection test and retry, speaker labels (You/Others), meeting auto-detect (macOS), transcription failures surfaced instead of swallowed, sharper specificity-enforcing summary prompts, TownHall template, analytics/telemetry fully removed.
+> - **Fixes** (from [kevinyuan/meetily-zh](https://github.com/kevinyuan/meetily-zh), i18n excluded): recovered dropped mic speech, Markdown export, transcribe-on-pause with tunable pause slider, Silero VAD crash fix, smooth transcript auto-scroll, blank-window and startup-race fixes, ~49 noisy toasts removed.
+> - **Hardening** (from [henryvn27/meetily_improved](https://github.com/henryvn27/meetily_improved)): least-privilege Tauri command allowlist with a drift-failing contract test, webview CSP with zero network access, cargo-deny supply-chain policy, SHA-pinned CI actions + CodeQL, dependency advisory patches, hardened external-URL opening.
+>
+> Auto-update signing keys and endpoints from all forks were stripped; no fork author retains an update channel into this build.
 
 ---
 
