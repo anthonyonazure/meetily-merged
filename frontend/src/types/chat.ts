@@ -6,6 +6,7 @@ export type ChatRole = 'user' | 'assistant';
 export interface ChatMessageRecord {
   id: string;
   meeting_id: string | null;
+  client_id: string | null;
   role: ChatRole;
   content: string;
   created_at: string;
@@ -17,6 +18,7 @@ export interface ChatSendResult {
 
 export interface ChatResponsePayload {
   meeting_id: string | null;
+  client_id: string | null;
   message: ChatMessageRecord;
   is_error: boolean;
 }

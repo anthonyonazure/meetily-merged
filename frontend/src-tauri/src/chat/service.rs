@@ -3,7 +3,10 @@
 use crate::agents::runner::resolve_llm_settings;
 use crate::database::models::ChatMessageRecord;
 use crate::database::repositories::{
-    chat::ChatMessagesRepository, meeting::MeetingsRepository,
+    chat::{ChatMessagesRepository, ChatScope},
+    client::{ClientsRepository, MeetingClientsRepository},
+    meeting::MeetingsRepository,
+    memory::MemoryFactsRepository,
     summary::SummaryProcessesRepository,
 };
 use crate::summary::llm_client::generate_summary;
@@ -28,14 +31,19 @@ const TRANSCRIPT_TAIL_CHARS: usize = 10_000;
 const ALL_MEETINGS_SUMMARY_CHARS: usize = 2_000;
 /// How many recent meetings the all-meetings scope includes.
 const ALL_MEETINGS_LIMIT: usize = 20;
+/// How many of the client's recent meetings the client scope includes.
+const CLIENT_MEETINGS_LIMIT: usize = 15;
 
 /// How many prior chat turns are replayed into the prompt for continuity.
 const HISTORY_TURNS: usize = 12;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatResponsePayload {
-    /// Scope the response belongs to (None = all-meetings thread).
+    /// Meeting scope the response belongs to, when any.
     pub meeting_id: Option<String>,
+    /// Client scope the response belongs to, when any. Both None = the
+    /// all-meetings thread.
+    pub client_id: Option<String>,
     /// The stored assistant message (also readable via `chat_history`).
     pub message: ChatMessageRecord,
     /// True when the content is an error report rather than an answer.
@@ -52,6 +60,14 @@ const SYSTEM_PROMPT_ALL: &str = "You are an assistant that answers questions acr
 You are given each meeting's title, date, and summary. Answer ONLY from that provided content. \
 If the answer is not in the provided content, say so plainly instead of guessing; \
 mention which meeting(s) your answer comes from. \
+Be concise and answer in plain English markdown.";
+
+const SYSTEM_PROMPT_CLIENT: &str = "You are an assistant that answers questions about one client relationship, \
+built from the user's recorded meetings with that client. \
+You are given the client's recent meetings (title, date, summary) and their memory facts \
+(commitments with status, decisions, figures, notes). Answer ONLY from that provided content. \
+If the answer is not in the provided content, say so plainly instead of guessing; \
+mention which meeting or fact your answer comes from. \
 Be concise and answer in plain English markdown.";
 
 /// Truncates a transcript from the middle, keeping head and tail, and notes
@@ -158,6 +174,89 @@ async fn build_all_meetings_context(pool: &SqlitePool) -> Result<String, String>
     Ok(context)
 }
 
+/// Builds the grounding context for the client scope: the client's most
+/// recent meetings (titles, dates, summaries) plus all their memory facts
+/// except dismissed ones.
+async fn build_client_context(pool: &SqlitePool, client_id: &str) -> Result<String, String> {
+    let client = ClientsRepository::get(pool, client_id)
+        .await
+        .map_err(|e| format!("Failed to load client: {}", e))?
+        .ok_or_else(|| "Client not found".to_string())?;
+
+    let meetings = MeetingClientsRepository::meetings_for_client(pool, client_id)
+        .await
+        .map_err(|e| format!("Failed to load client meetings: {}", e))?;
+    if meetings.is_empty() {
+        return Err(format!(
+            "No meetings are tagged with {} yet",
+            client.name
+        ));
+    }
+
+    let mut context = format!("Client: {}\n", client.name);
+    if let Some(domain) = client.domain.as_deref() {
+        context.push_str(&format!("Email domain: {}\n", domain));
+    }
+    if !client.notes.trim().is_empty() {
+        context.push_str(&format!("Notes: {}\n", client.notes.trim()));
+    }
+
+    context.push_str("\nRecent meetings with this client (newest first):\n\n");
+    for meeting in meetings.iter().take(CLIENT_MEETINGS_LIMIT) {
+        let date = meeting.created_at.0.format("%Y-%m-%d %H:%M UTC");
+        context.push_str(&format!("### {} ({})\n", meeting.title, date));
+        let summary = match SummaryProcessesRepository::get_summary_data(pool, &meeting.id).await {
+            Ok(Some(process)) => summary_markdown_from_result(process.result.as_deref()),
+            _ => None,
+        };
+        match summary {
+            Some(md) => {
+                let clipped: String = md.chars().take(ALL_MEETINGS_SUMMARY_CHARS).collect();
+                context.push_str(&clipped);
+                if md.chars().count() > ALL_MEETINGS_SUMMARY_CHARS {
+                    context.push_str("\n[summary truncated]");
+                }
+            }
+            None => context.push_str("(no summary generated)"),
+        }
+        context.push_str("\n\n");
+    }
+
+    let facts = MemoryFactsRepository::for_client(pool, client_id)
+        .await
+        .map_err(|e| format!("Failed to load client memory: {}", e))?;
+    let facts: Vec<_> = facts
+        .into_iter()
+        .filter(|fact| fact.status != "dismissed")
+        .collect();
+    if !facts.is_empty() {
+        context.push_str("Client memory facts:\n");
+        for fact in facts {
+            let status = match fact.status.as_str() {
+                "na" => String::new(),
+                other => format!(", {}", other),
+            };
+            let mut line = format!(
+                "- [{}{}] {} — {}",
+                fact.kind, status, fact.subject, fact.detail
+            );
+            if let Some(owner) = fact.owner.as_deref() {
+                line.push_str(&format!(" (owner: {})", owner));
+            }
+            if let Some(due) = fact.due_hint.as_deref() {
+                line.push_str(&format!(" (due: {})", due));
+            }
+            if let Some(amount) = fact.amount.as_deref() {
+                line.push_str(&format!(" ({})", amount));
+            }
+            line.push_str(&format!(" (from \"{}\")", fact.meeting_title));
+            context.push_str(&line);
+            context.push('\n');
+        }
+    }
+    Ok(context)
+}
+
 /// Assembles the user prompt: grounding context, recent conversation, and the
 /// new question. History goes into the user prompt because the shared
 /// `generate_summary` plumbing takes a single system + user message pair.
@@ -192,25 +291,25 @@ fn build_user_prompt(context: &str, history: &[ChatMessageRecord], question: &st
 /// configured LLM, persists the assistant message, and emits
 /// `chat-response`. Failures are persisted as an assistant message too, so the
 /// poll fallback surfaces them without special casing.
-#[allow(clippy::too_many_arguments)]
 pub async fn execute_chat_request<R: Runtime>(
     app: AppHandle<R>,
     pool: SqlitePool,
-    meeting_id: Option<String>,
+    scope: ChatScope,
     question: String,
     model_provider: String,
     model_name: String,
     app_data_dir: Option<PathBuf>,
 ) {
-    let scope = meeting_id.as_deref().unwrap_or("all-meetings");
     info!(
         "Chat request started: scope={}, provider={}, model={}",
-        scope, model_provider, model_name
+        scope.label(),
+        model_provider,
+        model_name
     );
 
     let outcome = run_chat_llm(
         &pool,
-        meeting_id.as_deref(),
+        &scope,
         &question,
         &model_provider,
         &model_name,
@@ -221,16 +320,16 @@ pub async fn execute_chat_request<R: Runtime>(
     let (content, is_error) = match outcome {
         Ok(answer) => (answer, false),
         Err(e) => {
-            error!("Chat request failed (scope={}): {}", scope, e);
+            error!("Chat request failed (scope={}): {}", scope.label(), e);
             (format!("The model request failed: {}", e), true)
         }
     };
 
-    match ChatMessagesRepository::insert(&pool, meeting_id.as_deref(), "assistant", &content).await
-    {
+    match ChatMessagesRepository::insert(&pool, &scope, "assistant", &content).await {
         Ok(record) => {
             let payload = ChatResponsePayload {
-                meeting_id: meeting_id.clone(),
+                meeting_id: scope.meeting_id().map(str::to_string),
+                client_id: scope.client_id().map(str::to_string),
                 message: record,
                 is_error,
             };
@@ -238,13 +337,17 @@ pub async fn execute_chat_request<R: Runtime>(
                 error!("Failed to emit chat-response event: {}", e);
             }
         }
-        Err(e) => error!("Failed to persist chat response (scope={}): {}", scope, e),
+        Err(e) => error!(
+            "Failed to persist chat response (scope={}): {}",
+            scope.label(),
+            e
+        ),
     }
 }
 
 async fn run_chat_llm(
     pool: &SqlitePool,
-    meeting_id: Option<&str>,
+    scope: &ChatScope,
     question: &str,
     model_provider: &str,
     model_name: &str,
@@ -255,7 +358,7 @@ async fn run_chat_llm(
     // History is read before the new user message was... no: the command
     // inserts the user message first, so drop the trailing user turn (it is
     // passed separately as the question).
-    let mut history = ChatMessagesRepository::history(pool, meeting_id)
+    let mut history = ChatMessagesRepository::history(pool, scope)
         .await
         .map_err(|e| format!("Failed to load chat history: {}", e))?;
     if history
@@ -266,12 +369,16 @@ async fn run_chat_llm(
         history.pop();
     }
 
-    let (system_prompt, context) = match meeting_id {
-        Some(id) => (
+    let (system_prompt, context) = match scope {
+        ChatScope::Meeting(id) => (
             SYSTEM_PROMPT_SINGLE,
             build_single_meeting_context(pool, id).await?,
         ),
-        None => (SYSTEM_PROMPT_ALL, build_all_meetings_context(pool).await?),
+        ChatScope::Client(id) => (
+            SYSTEM_PROMPT_CLIENT,
+            build_client_context(pool, id).await?,
+        ),
+        ChatScope::All => (SYSTEM_PROMPT_ALL, build_all_meetings_context(pool).await?),
     };
 
     let user_prompt = build_user_prompt(&context, &history, question);
@@ -306,6 +413,7 @@ mod tests {
         ChatMessageRecord {
             id: format!("chatmsg-{}", content.len()),
             meeting_id: None,
+            client_id: None,
             role: role.to_string(),
             content: content.to_string(),
             created_at: Utc::now(),

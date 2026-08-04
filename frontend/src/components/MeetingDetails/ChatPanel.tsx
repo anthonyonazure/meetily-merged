@@ -9,40 +9,76 @@ import { Button } from '@/components/ui/button';
 import { MarkdownLite } from '@/components/shared/MarkdownLite';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ChatMessageRecord, ChatResponsePayload, ChatSendResult } from '@/types/chat';
+import { Client } from '@/types/clients';
 
 const POLL_INTERVAL_MS = 4000;
 
-type ChatScope = 'meeting' | 'all';
+type ChatScope = 'meeting' | 'all' | 'client';
 
 interface ChatPanelProps {
-  meetingId: string;
+  /** Meeting the panel is mounted on (meeting-details). */
+  meetingId?: string;
+  /** Locks the panel to one client's thread (Clients page). */
+  fixedClient?: { id: string; name: string };
 }
 
-export function ChatPanel({ meetingId }: ChatPanelProps) {
+export function ChatPanel({ meetingId, fixedClient }: ChatPanelProps) {
   const { modelConfig } = useConfig();
   const [expanded, setExpanded] = useState(false);
-  const [scope, setScope] = useState<ChatScope>('meeting');
+  const [scope, setScope] = useState<ChatScope>(fixedClient ? 'client' : 'meeting');
+  const [meetingClient, setMeetingClient] = useState<Client | null>(null);
   const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
   const [input, setInput] = useState('');
   const [waiting, setWaiting] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const meetingIdRef = useRef(meetingId);
-  meetingIdRef.current = meetingId;
-  const scopeRef = useRef(scope);
-  scopeRef.current = scope;
 
-  // The backend scope id: the meeting id, or null for the all-meetings thread.
-  const scopeMeetingId = scope === 'meeting' ? meetingId : null;
+  const activeClient = fixedClient ?? (meetingClient ? { id: meetingClient.id, name: meetingClient.name } : null);
+
+  // The ids sent to the backend for the current scope.
+  const scopeMeetingId = scope === 'meeting' && meetingId ? meetingId : null;
+  const scopeClientId = scope === 'client' && activeClient ? activeClient.id : null;
+  // One string key so async handlers can detect scope switches.
+  const scopeKey = scopeClientId
+    ? `client:${scopeClientId}`
+    : scopeMeetingId
+      ? `meeting:${scopeMeetingId}`
+      : 'all';
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
+
+  // On meeting-details, the Client scope is offered when the meeting is tagged.
+  useEffect(() => {
+    if (fixedClient || !meetingId) return;
+    let cancelled = false;
+    setMeetingClient(null);
+    void (async () => {
+      try {
+        const tagged = await invoke<Client | null>('meeting_get_client', { meetingId });
+        if (!cancelled) setMeetingClient(tagged);
+      } catch (error) {
+        console.error('Failed to load meeting client for chat:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [meetingId, fixedClient]);
+
+  // Leave the client scope if the meeting changes to one without that client.
+  useEffect(() => {
+    if (!fixedClient && scope === 'client' && !meetingClient) setScope('meeting');
+  }, [fixedClient, scope, meetingClient]);
 
   const refresh = useCallback(async () => {
-    const requestedMeetingId = meetingIdRef.current;
-    const requestedScope = scopeRef.current;
+    const requestedKey = scopeKeyRef.current;
+    const [kind, id] = requestedKey === 'all' ? ['all', null] : (requestedKey.split(':') as [string, string]);
     try {
       const history = await invoke<ChatMessageRecord[]>('chat_history', {
-        meetingId: requestedScope === 'meeting' ? requestedMeetingId : null,
+        meetingId: kind === 'meeting' ? id : null,
+        clientId: kind === 'client' ? id : null,
       });
       // Ignore stale responses after a meeting or scope switch.
-      if (meetingIdRef.current !== requestedMeetingId || scopeRef.current !== requestedScope) return;
+      if (scopeKeyRef.current !== requestedKey) return;
       setMessages(history);
       // An assistant message after the last user message means nothing is pending.
       const last = history[history.length - 1];
@@ -52,19 +88,22 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
     }
   }, []);
 
-  // Load on mount and whenever the meeting or scope changes.
+  // Load on mount and whenever the scope key changes.
   useEffect(() => {
     setMessages([]);
     setWaiting(false);
     void refresh();
-  }, [meetingId, scope, refresh]);
+  }, [scopeKey, refresh]);
 
   // Event push: refresh when a response for our scope arrives.
   useEffect(() => {
     const unlistenPromise = listen<ChatResponsePayload>('chat-response', event => {
-      const payloadScope = event.payload.meeting_id;
-      const currentScope = scopeRef.current === 'meeting' ? meetingIdRef.current : null;
-      if (payloadScope === currentScope) void refresh();
+      const payloadKey = event.payload.client_id
+        ? `client:${event.payload.client_id}`
+        : event.payload.meeting_id
+          ? `meeting:${event.payload.meeting_id}`
+          : 'all';
+      if (payloadKey === scopeKeyRef.current) void refresh();
     });
     return () => {
       void unlistenPromise.then(unlisten => unlisten());
@@ -102,6 +141,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
       {
         id: `pending-${Date.now()}`,
         meeting_id: scopeMeetingId,
+        client_id: scopeClientId,
         role: 'user',
         content: question,
         created_at: new Date().toISOString(),
@@ -110,6 +150,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
     try {
       await invoke<ChatSendResult>('chat_send', {
         meetingId: scopeMeetingId,
+        clientId: scopeClientId,
         message: question,
         modelProvider: modelConfig.provider,
         modelName: modelConfig.model,
@@ -122,18 +163,35 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
       });
       void refresh();
     }
-  }, [input, waiting, modelConfig.provider, modelConfig.model, scopeMeetingId, refresh]);
+  }, [input, waiting, modelConfig.provider, modelConfig.model, scopeMeetingId, scopeClientId, refresh]);
 
   const handleClear = useCallback(async () => {
     try {
-      await invoke<number>('chat_clear', { meetingId: scopeMeetingId });
+      await invoke<number>('chat_clear', {
+        meetingId: scopeMeetingId,
+        clientId: scopeClientId,
+      });
       setMessages([]);
       setWaiting(false);
     } catch (error) {
       console.error('Failed to clear chat history:', error);
       toast.error('Failed to clear chat history');
     }
-  }, [scopeMeetingId]);
+  }, [scopeMeetingId, scopeClientId]);
+
+  const emptyHint =
+    scope === 'meeting'
+      ? 'Ask a question about this meeting. Answers come only from its transcript and summary.'
+      : scope === 'client'
+        ? `Ask about ${activeClient?.name ?? 'this client'}. Answers come from their recent meetings and memory facts.`
+        : 'Ask a question across your recent meetings. Answers come from their titles and summaries.';
+
+  const placeholder =
+    scope === 'meeting'
+      ? 'Ask about this meeting…'
+      : scope === 'client'
+        ? `Ask about ${activeClient?.name ?? 'this client'}…`
+        : 'Ask across your meetings…';
 
   return (
     <div className="border-t border-edge bg-surface flex-shrink-0 flex flex-col max-h-[45%]">
@@ -159,20 +217,36 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
         <div className="flex flex-col min-h-0">
           {/* Scope switch and clear */}
           <div className="flex items-center gap-2 px-4 pb-2">
-            <div className="flex rounded-md border border-edge overflow-hidden text-xs">
-              <button
-                onClick={() => setScope('meeting')}
-                className={`px-2.5 py-1 ${scope === 'meeting' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
-              >
-                This meeting
-              </button>
-              <button
-                onClick={() => setScope('all')}
-                className={`px-2.5 py-1 border-l border-edge ${scope === 'all' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
-              >
-                All meetings
-              </button>
-            </div>
+            {!fixedClient && (
+              <div className="flex rounded-md border border-edge overflow-hidden text-xs">
+                <button
+                  onClick={() => setScope('meeting')}
+                  className={`px-2.5 py-1 ${scope === 'meeting' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
+                >
+                  This meeting
+                </button>
+                {meetingClient && (
+                  <button
+                    onClick={() => setScope('client')}
+                    className={`px-2.5 py-1 border-l border-edge ${scope === 'client' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
+                    title={`Ask across everything tagged ${meetingClient.name}`}
+                  >
+                    {meetingClient.name}
+                  </button>
+                )}
+                <button
+                  onClick={() => setScope('all')}
+                  className={`px-2.5 py-1 border-l border-edge ${scope === 'all' ? 'bg-wash text-ink font-medium' : 'text-muted-ink hover:bg-wash'}`}
+                >
+                  All meetings
+                </button>
+              </div>
+            )}
+            {fixedClient && (
+              <span className="text-xs text-muted-ink">
+                Asking about <span className="font-medium text-ink">{fixedClient.name}</span>
+              </span>
+            )}
             {messages.length > 0 && (
               <Button
                 variant="ghost"
@@ -190,11 +264,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
           {/* Message list */}
           <div ref={listRef} className="overflow-y-auto px-4 space-y-3 min-h-[80px] max-h-[240px]">
             {messages.length === 0 && !waiting && (
-              <div className="text-sm text-faint py-2">
-                {scope === 'meeting'
-                  ? 'Ask a question about this meeting. Answers come only from its transcript and summary.'
-                  : 'Ask a question across your recent meetings. Answers come from their titles and summaries.'}
-              </div>
+              <div className="text-sm text-faint py-2">{emptyHint}</div>
             )}
             {messages.map(message => (
               <div key={message.id} className={message.role === 'user' ? 'text-right' : 'text-left'}>
@@ -233,7 +303,7 @@ export function ChatPanel({ meetingId }: ChatPanelProps) {
                 }
               }}
               rows={1}
-              placeholder={scope === 'meeting' ? 'Ask about this meeting…' : 'Ask across your meetings…'}
+              placeholder={placeholder}
               className="flex-1 resize-none rounded-md border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-300"
             />
             <Button

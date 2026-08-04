@@ -4,6 +4,7 @@ use crate::clients::follow_through::{self, FollowThroughResult};
 use crate::clients::suggest::{self, ClientSuggestion};
 use crate::database::models::{Client, ClientWithCounts, MemoryFact, MemoryFactWithMeeting};
 use crate::database::repositories::{
+    chat::{ChatMessagesRepository, ChatScope},
     client::{ClientsRepository, MeetingClientsRepository},
     meeting::MeetingsRepository,
     memory::MemoryFactsRepository,
@@ -109,6 +110,10 @@ pub async fn client_delete(
     MemoryFactsRepository::unlink_client(pool, &client_id)
         .await
         .map_err(|e| format!("Failed to unlink client facts: {}", e))?;
+    // The client's chat thread has no home once the client is gone.
+    ChatMessagesRepository::clear(pool, &ChatScope::Client(client_id.clone()))
+        .await
+        .map_err(|e| format!("Failed to clear client chat: {}", e))?;
     ClientsRepository::delete(pool, &client_id)
         .await
         .map_err(|e| format!("Failed to delete client: {}", e))

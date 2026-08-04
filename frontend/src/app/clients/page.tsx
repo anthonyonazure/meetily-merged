@@ -24,6 +24,7 @@ import {
   MemoryFactWithMeeting,
 } from '@/types/clients';
 import { FollowThroughCard } from '@/components/Clients/FollowThroughCard';
+import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
 const KIND_META: Record<string, { label: string; icon: typeof ListTodo }> = {
   commitment: { label: 'Commitment', icon: ListTodo },
   decision: { label: 'Decision', icon: Gavel },
@@ -354,6 +355,15 @@ export default function ClientsPage() {
                 ))}
               </div>
             )}
+
+            {/* Client-scoped chat: same thread whether opened here or from a
+                tagged meeting's chat panel. */}
+            <div className="mt-8 border border-edge rounded-lg overflow-hidden">
+              <ChatPanel
+                key={selectedClient.id}
+                fixedClient={{ id: selectedClient.id, name: selectedClient.name }}
+              />
+            </div>
           </div>
         )}
       </div>

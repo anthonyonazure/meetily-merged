@@ -2,7 +2,7 @@
 
 use crate::chat::service;
 use crate::database::models::ChatMessageRecord;
-use crate::database::repositories::chat::ChatMessagesRepository;
+use crate::database::repositories::chat::{ChatMessagesRepository, ChatScope};
 use crate::state::AppState;
 use log::info as log_info;
 use serde::{Deserialize, Serialize};
@@ -18,14 +18,15 @@ pub struct ChatSendResult {
     pub message_id: String,
 }
 
-/// Sends a question about one meeting (`meeting_id` set) or across recent
-/// meetings (`meeting_id` null). Stores the user message, spawns the LLM
-/// request in the background, and returns immediately.
+/// Sends a question about one meeting (`meeting_id` set), one client
+/// (`client_id` set), or across recent meetings (both null). Stores the user
+/// message, spawns the LLM request in the background, and returns immediately.
 #[tauri::command]
 pub async fn chat_send<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, AppState>,
     meeting_id: Option<String>,
+    client_id: Option<String>,
     message: String,
     model_provider: String,
     model_name: String,
@@ -41,14 +42,15 @@ pub async fn chat_send<R: Runtime>(
         ));
     }
 
+    let scope = ChatScope::from_ids(meeting_id, client_id);
     log_info!(
         "chat_send called: scope={}, provider={}",
-        meeting_id.as_deref().unwrap_or("all-meetings"),
+        scope.label(),
         model_provider
     );
 
     let pool = state.db_manager.pool().clone();
-    let record = ChatMessagesRepository::insert(&pool, meeting_id.as_deref(), "user", &question)
+    let record = ChatMessagesRepository::insert(&pool, &scope, "user", &question)
         .await
         .map_err(|e| format!("Failed to store chat message: {}", e))?;
 
@@ -56,7 +58,7 @@ pub async fn chat_send<R: Runtime>(
     tauri::async_runtime::spawn(service::execute_chat_request(
         app.clone(),
         pool,
-        meeting_id,
+        scope,
         question,
         model_provider,
         model_name,
@@ -73,8 +75,10 @@ pub async fn chat_send<R: Runtime>(
 pub async fn chat_history(
     state: tauri::State<'_, AppState>,
     meeting_id: Option<String>,
+    client_id: Option<String>,
 ) -> Result<Vec<ChatMessageRecord>, String> {
-    ChatMessagesRepository::history(state.db_manager.pool(), meeting_id.as_deref())
+    let scope = ChatScope::from_ids(meeting_id, client_id);
+    ChatMessagesRepository::history(state.db_manager.pool(), &scope)
         .await
         .map_err(|e| format!("Failed to load chat history: {}", e))
 }
@@ -84,8 +88,10 @@ pub async fn chat_history(
 pub async fn chat_clear(
     state: tauri::State<'_, AppState>,
     meeting_id: Option<String>,
+    client_id: Option<String>,
 ) -> Result<u64, String> {
-    ChatMessagesRepository::clear(state.db_manager.pool(), meeting_id.as_deref())
+    let scope = ChatScope::from_ids(meeting_id, client_id);
+    ChatMessagesRepository::clear(state.db_manager.pool(), &scope)
         .await
         .map_err(|e| format!("Failed to clear chat history: {}", e))
 }
