@@ -142,6 +142,12 @@ dirs = "5.0.1"
 # Additional dependencies for notification system
 url = "2.5.0"
 
+# OS keychain storage for integration secrets (M365 OAuth tokens, Slack/Teams
+# webhook URLs). Exact pin: security-sensitive dependency. Backends compile
+# with no extra system deps: security-framework (macOS), windows-sys
+# (Windows), kernel keyutils (Linux).
+keyring = { version = "=3.6.3", features = ["apple-native", "windows-native", "linux-native"] }
+
 
 # System monitoring for resource management
 sysinfo = "0.32"

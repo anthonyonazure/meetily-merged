@@ -163,6 +163,7 @@ pub mod console_utils;
 pub mod database;
 pub mod detection;
 pub mod dictation;
+pub mod m365;
 pub mod notifications;
 pub mod ollama;
 pub mod onboarding;
@@ -798,6 +799,16 @@ pub fn run() {
             calendar::calendar_permission_status,
             calendar::calendar_request_access,
             calendar::calendar_upcoming_events,
+            // Microsoft 365 integration (device-code OAuth, Graph calendar,
+            // Outlook draft share). Tokens live in the OS keychain.
+            m365::commands::m365_get_config,
+            m365::commands::m365_set_config,
+            m365::commands::m365_auth_status,
+            m365::commands::m365_begin_device_login,
+            m365::commands::m365_cancel_device_login,
+            m365::commands::m365_disconnect,
+            m365::commands::m365_upcoming_events,
+            m365::commands::m365_create_summary_draft,
             // Template commands
             summary::template_commands::api_list_templates,
             summary::template_commands::api_get_template_details,

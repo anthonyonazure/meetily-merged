@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CalendarClock, Video } from 'lucide-react';
@@ -19,7 +20,13 @@ interface CalendarEvent {
   meeting_url: string | null;
 }
 
-type CalendarStatus =
+type EventSource = 'local' | 'm365';
+
+interface MergedEvent extends CalendarEvent {
+  source: EventSource;
+}
+
+type LocalCalendarStatus =
   | 'loading'
   | 'unsupported'
   | 'not_determined'
@@ -37,19 +44,61 @@ function formatEventTime(event: CalendarEvent): string {
   return sameDay ? time : `${start.toLocaleDateString([], { weekday: 'short' })} ${time}`;
 }
 
-// Sidebar section listing calendar events for the next 24 hours (macOS).
+// Two sources can hold the same meeting (e.g. an M365 account also synced
+// into the OS calendar). Treat "same title, same start minute" as one
+// meeting: keep the local entry, but adopt the other side's meeting URL if
+// the kept one has none.
+function mergeEvents(local: CalendarEvent[], m365: CalendarEvent[]): MergedEvent[] {
+  const merged = new Map<string, MergedEvent>();
+  const keyFor = (event: CalendarEvent) =>
+    `${event.title.trim().toLowerCase()}|${new Date(event.start).setSeconds(0, 0)}`;
+
+  for (const event of local) {
+    merged.set(keyFor(event), { ...event, source: 'local' });
+  }
+  for (const event of m365) {
+    const key = keyFor(event);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...event, source: 'm365' });
+    } else if (!existing.meeting_url && event.meeting_url) {
+      merged.set(key, { ...existing, meeting_url: event.meeting_url });
+    }
+  }
+  return [...merged.values()].sort((a, b) => a.start.localeCompare(b.start));
+}
+
+// Sidebar section listing calendar events for the next 24 hours. Two
+// sources: the OS calendar via EventKit (macOS) and Microsoft 365 via Graph
+// (any platform, when connected in Settings → Integrations).
 export function UpcomingEvents() {
   const router = useRouter();
   const { setMeetingTitle } = useTranscripts();
-  const [status, setStatus] = useState<CalendarStatus>('loading');
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [localStatus, setLocalStatus] = useState<LocalCalendarStatus>('loading');
+  const [m365Connected, setM365Connected] = useState(false);
+  const [localEvents, setLocalEvents] = useState<CalendarEvent[]>([]);
+  const [m365Events, setM365Events] = useState<CalendarEvent[]>([]);
 
-  const loadEvents = useCallback(async () => {
+  const loadLocalEvents = useCallback(async () => {
     try {
-      const upcoming = await invoke<CalendarEvent[]>('calendar_upcoming_events');
-      setEvents(upcoming);
+      setLocalEvents(await invoke<CalendarEvent[]>('calendar_upcoming_events'));
     } catch (error) {
       console.error('Failed to load calendar events:', error);
+    }
+  }, []);
+
+  const loadM365Events = useCallback(async () => {
+    try {
+      const status = await invoke<{ connected: boolean }>('m365_auth_status');
+      setM365Connected(status.connected);
+      if (!status.connected) {
+        setM365Events([]);
+        return;
+      }
+      setM365Events(await invoke<CalendarEvent[]>('m365_upcoming_events'));
+    } catch (error) {
+      // Token expiry etc. — log quietly; the sidebar is not the place to nag.
+      console.error('Failed to load M365 calendar events:', error);
     }
   }, []);
 
@@ -61,39 +110,52 @@ export function UpcomingEvents() {
         const permission = await invoke<string>('calendar_permission_status');
         if (cancelled) return;
         if (permission === 'full_access') {
-          setStatus('granted');
-          void loadEvents();
+          setLocalStatus('granted');
+          void loadLocalEvents();
         } else if (permission === 'not_determined') {
-          setStatus('not_determined');
+          setLocalStatus('not_determined');
         } else {
           // denied / restricted / write_only: stay quiet, no nagging.
-          setStatus('denied');
+          setLocalStatus('denied');
         }
       } catch {
-        // Non-macOS platforms report a clear error; hide the section.
-        if (!cancelled) setStatus('unsupported');
+        // Non-macOS platforms report a clear error; M365 may still work.
+        if (!cancelled) setLocalStatus('unsupported');
       }
     })();
+    void loadM365Events();
     return () => {
       cancelled = true;
     };
-  }, [loadEvents]);
+  }, [loadLocalEvents, loadM365Events]);
 
-  // Periodic refresh while granted.
+  // React immediately when the user connects M365 in settings.
   useEffect(() => {
-    if (status !== 'granted') return;
-    const interval = setInterval(() => void loadEvents(), REFRESH_INTERVAL_MS);
+    let unlisten: UnlistenFn | undefined;
+    void (async () => {
+      unlisten = await listen('m365-connected', () => void loadM365Events());
+    })();
+    return () => unlisten?.();
+  }, [loadM365Events]);
+
+  // Periodic refresh of whichever sources are active.
+  useEffect(() => {
+    if (localStatus !== 'granted' && !m365Connected) return;
+    const interval = setInterval(() => {
+      if (localStatus === 'granted') void loadLocalEvents();
+      void loadM365Events();
+    }, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [status, loadEvents]);
+  }, [localStatus, m365Connected, loadLocalEvents, loadM365Events]);
 
   const handleConnect = useCallback(async () => {
     try {
       const granted = await invoke<boolean>('calendar_request_access');
       if (granted) {
-        setStatus('granted');
-        void loadEvents();
+        setLocalStatus('granted');
+        void loadLocalEvents();
       } else {
-        setStatus('denied');
+        setLocalStatus('denied');
         toast.error('Calendar access was not granted', {
           description: 'You can enable it later in System Settings > Privacy & Security > Calendars.',
         });
@@ -102,7 +164,7 @@ export function UpcomingEvents() {
       console.error('Calendar access request failed:', error);
       toast.error('Calendar access request failed', { description: String(error) });
     }
-  }, [loadEvents]);
+  }, [loadLocalEvents]);
 
   const handleEventClick = useCallback(
     (event: CalendarEvent) => {
@@ -124,9 +186,13 @@ export function UpcomingEvents() {
     }
   }, []);
 
-  if (status === 'loading' || status === 'unsupported' || status === 'denied') {
+  const localVisible = localStatus === 'granted' || localStatus === 'not_determined';
+  if (!localVisible && !m365Connected) {
     return null;
   }
+
+  const events = mergeEvents(localStatus === 'granted' ? localEvents : [], m365Events);
+  const showEvents = localStatus === 'granted' || m365Connected;
 
   return (
     <div className="mx-3 mt-3">
@@ -135,7 +201,7 @@ export function UpcomingEvents() {
         <span className="text-muted-ink">Upcoming</span>
       </div>
 
-      {status === 'not_determined' && (
+      {localStatus === 'not_determined' && (
         <button
           onClick={() => void handleConnect()}
           className="mx-3 mb-1 px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md text-left w-[calc(100%-1.5rem)]"
@@ -144,13 +210,13 @@ export function UpcomingEvents() {
         </button>
       )}
 
-      {status === 'granted' && events.length === 0 && (
+      {showEvents && events.length === 0 && (
         <div className="mx-3 mb-1 px-2 py-1 text-xs text-faint">
           No meetings in the next 24 hours
         </div>
       )}
 
-      {status === 'granted' &&
+      {showEvents &&
         events.map(event => (
           <div
             key={`${event.id}-${event.start}`}
@@ -162,6 +228,12 @@ export function UpcomingEvents() {
               {formatEventTime(event)}
             </span>
             <span className="text-sm text-muted-ink truncate flex-1">{event.title}</span>
+            <span
+              title={event.source === 'm365' ? 'From Microsoft 365' : 'From your OS calendar'}
+              className="text-[9px] uppercase tracking-wide text-faint border border-edge rounded px-1 py-px flex-shrink-0"
+            >
+              {event.source === 'm365' ? 'M365' : 'Cal'}
+            </span>
             {event.meeting_url && (
               <button
                 onClick={mouseEvent => void handleJoin(event, mouseEvent)}

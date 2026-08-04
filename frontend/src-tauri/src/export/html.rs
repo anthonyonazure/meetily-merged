@@ -32,7 +32,9 @@ fn inlines_to_html(inlines: &[Inline]) -> String {
 /// Renders markdown blocks, opening/closing list tags around contiguous list
 /// items. Nested depth renders via CSS margin classes instead of nested tags
 /// (simpler, prints identically for our subset).
-fn blocks_to_html(blocks: &[Block]) -> String {
+/// `pub(crate)`: also reused by the M365 integration to render summary
+/// markdown into Outlook draft bodies.
+pub(crate) fn blocks_to_html(blocks: &[Block]) -> String {
     let mut html = String::new();
     let mut open_list: Option<&'static str> = None;
 
