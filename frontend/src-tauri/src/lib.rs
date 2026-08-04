@@ -156,6 +156,7 @@ pub(crate) use perf_trace;
 pub mod agents;
 pub mod api;
 pub mod audio;
+pub mod autojoin;
 pub mod calendar;
 pub mod chat;
 pub mod config;
@@ -549,6 +550,10 @@ pub fn run() {
             let detection_service = detection::spawn(_app.handle().clone());
             _app.manage(detection_service);
 
+            // Calendar auto-join prompt scheduler (EventKit + M365 sources).
+            // Prompt-then-open only; gated by the `autojoin_prompt` setting.
+            autojoin::spawn(_app.handle().clone());
+
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
 
@@ -939,6 +944,9 @@ pub fn run() {
                     if let Some(svc) = _app_handle.try_state::<detection::DetectionService>() {
                         svc.shutdown();
                     }
+
+                    // Same for the calendar auto-join scheduler.
+                    autojoin::shutdown();
 
                     tauri::async_runtime::block_on(async {
                         // Clean up database connection and checkpoint WAL

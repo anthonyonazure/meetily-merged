@@ -25,6 +25,7 @@ import { RecordingPostProcessingProvider } from '@/contexts/RecordingPostProcess
 import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
 import { ImportDialogProvider } from '@/contexts/ImportDialogContext'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
+import { MeetingStartingBanner } from '@/components/MeetingStartingBanner'
 import { ThemeProvider, THEME_STORAGE_KEY } from '@/contexts/ThemeContext'
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats'
 
@@ -390,6 +391,10 @@ export default function RootLayout({
                                   <MainContent>{children}</MainContent>
                                 </div>
                               )}
+                              {/* Calendar auto-join prompt banner (Join is
+                                  the only thing that opens the link) */}
+                              <MeetingStartingBanner />
+
                               {/* Import audio overlay and dialog */}
                               <ImportDropOverlay visible={showDropOverlay} />
                               <ConditionalImportDialog
