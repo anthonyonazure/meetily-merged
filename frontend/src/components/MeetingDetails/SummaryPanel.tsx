@@ -7,6 +7,7 @@ import { EmptyStateSummary } from '@/components/EmptyStateSummary';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
+import { ShareSummaryMenu } from './ShareSummaryMenu';
 import { useEffect, useRef, useState, RefObject } from 'react';
 import { toast } from 'sonner';
 import { Languages, ChevronDown } from 'lucide-react';
@@ -309,6 +310,15 @@ export function SummaryPanel({
                 }}
                 onOpenFolder={onOpenFolder}
                 hasSummary={!!aiSummary}
+              />
+            </div>
+
+            {/* Explicit per-meeting share actions (Outlook draft / Slack / Teams) */}
+            <div className="flex-shrink-0">
+              <ShareSummaryMenu
+                meetingTitle={meetingTitle}
+                aiSummary={aiSummary}
+                summaryRef={summaryRef}
               />
             </div>
           </div>

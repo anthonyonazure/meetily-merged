@@ -165,6 +165,7 @@ pub mod detection;
 pub mod dictation;
 pub mod m365;
 pub mod notifications;
+pub mod share;
 pub mod ollama;
 pub mod onboarding;
 pub mod openai;
@@ -809,6 +810,11 @@ pub fn run() {
             m365::commands::m365_disconnect,
             m365::commands::m365_upcoming_events,
             m365::commands::m365_create_summary_draft,
+            // Slack / Teams webhook sharing (explicit per-meeting actions)
+            share::share_get_targets,
+            share::share_set_webhook,
+            share::share_slack,
+            share::share_teams,
             // Template commands
             summary::template_commands::api_list_templates,
             summary::template_commands::api_get_template_details,
