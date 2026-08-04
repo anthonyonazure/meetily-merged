@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug } from 'lucide-react';
+import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
@@ -11,6 +11,7 @@ import { PreferenceSettings } from '@/components/PreferenceSettings';
 import { SummaryModelSettings } from '@/components/SummaryModelSettings';
 import { BetaSettings } from '@/components/BetaSettings';
 import { IntegrationsSettings } from '@/components/IntegrationsSettings';
+import { ClientsSettings } from '@/components/ClientsSettings';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -21,6 +22,7 @@ const TABS = [
   { value: 'Transcriptionmodels', label: 'Transcription', icon: DatabaseIcon },
   { value: 'summaryModels', label: 'Summary', icon: SparkleIcon },
   { value: 'integrations', label: 'Integrations', icon: Plug },
+  { value: 'clients', label: 'Clients', icon: Briefcase },
   { value: 'beta', label: 'Beta', icon: FlaskConical }
 ] as const;
 
@@ -129,6 +131,9 @@ export default function SettingsPage() {
             </TabsContent>
             <TabsContent value="integrations">
               <IntegrationsSettings />
+            </TabsContent>
+            <TabsContent value="clients">
+              <ClientsSettings />
             </TabsContent>
             <TabsContent value="beta" className="mt-6">
               <BetaSettings />

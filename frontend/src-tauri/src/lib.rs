@@ -159,6 +159,7 @@ pub mod audio;
 pub mod autojoin;
 pub mod calendar;
 pub mod chat;
+pub mod clients;
 pub mod config;
 pub mod console_utils;
 pub mod database;
@@ -797,6 +798,14 @@ pub fn run() {
             agents::commands::actions_for_meeting,
             agents::commands::action_set_status,
             agents::commands::action_delete,
+            // Client Memory commands (registry, tagging, suggestion)
+            clients::commands::clients_list,
+            clients::commands::client_create,
+            clients::commands::client_update,
+            clients::commands::client_delete,
+            clients::commands::meeting_set_client,
+            clients::commands::meeting_get_client,
+            clients::commands::meeting_suggest_client,
             // Chat with meetings commands
             chat::commands::chat_send,
             chat::commands::chat_history,

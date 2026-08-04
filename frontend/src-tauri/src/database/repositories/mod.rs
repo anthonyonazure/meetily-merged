@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod chat;
+pub mod client;
 pub mod meeting;
 pub mod setting;
 pub mod summary;

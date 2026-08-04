@@ -160,6 +160,28 @@ pub struct ChatMessageRecord {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// One client in the Client Memory registry.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct Client {
+    pub id: String,
+    pub name: String,
+    pub domain: Option<String>,
+    pub notes: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Client joined with aggregate counts, for the Clients list view.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ClientWithCounts {
+    pub id: String,
+    pub name: String,
+    pub domain: Option<String>,
+    pub notes: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub meeting_count: i64,
+    pub open_commitments: i64,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AgentSettingRow {
     pub agent_id: String,

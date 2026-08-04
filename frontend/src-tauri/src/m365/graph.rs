@@ -150,6 +150,52 @@ fn parse_event(item: &Value) -> Option<CalendarEvent> {
     })
 }
 
+/// Lists attendee email addresses for events overlapping the given UTC window.
+/// Used by client suggestion: attendee domains are matched against client
+/// domains. Read-only calendar access, same scope as `upcoming_events`.
+pub async fn attendee_emails_between(
+    access_token: &str,
+    start: chrono::DateTime<chrono::Utc>,
+    end: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<String>, String> {
+    let response = http_client()?
+        .get(format!("{}/me/calendarView", GRAPH_BASE))
+        .query(&[
+            ("startDateTime", start.to_rfc3339()),
+            ("endDateTime", end.to_rfc3339()),
+            ("$select", "subject,attendees,organizer,isCancelled".to_string()),
+            ("$top", "25".to_string()),
+        ])
+        .header("Prefer", "outlook.timezone=\"UTC\"")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach Microsoft Graph: {}", e))?;
+    if !response.status().is_success() {
+        return Err(error_for(response).await);
+    }
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Unexpected calendarView response: {}", e))?;
+
+    let mut emails = Vec::new();
+    for item in payload["value"].as_array().into_iter().flatten() {
+        if item["isCancelled"].as_bool().unwrap_or(false) {
+            continue;
+        }
+        if let Some(address) = item["organizer"]["emailAddress"]["address"].as_str() {
+            emails.push(address.to_string());
+        }
+        for attendee in item["attendees"].as_array().into_iter().flatten() {
+            if let Some(address) = attendee["emailAddress"]["address"].as_str() {
+                emails.push(address.to_string());
+            }
+        }
+    }
+    Ok(emails)
+}
+
 /// Creates a DRAFT message (never sends) and returns a URL that opens the
 /// draft for review — the Graph-provided webLink when present, otherwise the
 /// OWA drafts folder.

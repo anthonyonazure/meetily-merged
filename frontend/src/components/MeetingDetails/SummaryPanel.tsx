@@ -8,6 +8,7 @@ import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
 import { ShareSummaryMenu } from './ShareSummaryMenu';
+import { ClientChip } from '@/components/Clients/ClientChip';
 import { useEffect, useRef, useState, RefObject } from 'react';
 import { toast } from 'sonner';
 import { Languages, ChevronDown } from 'lucide-react';
@@ -262,6 +263,10 @@ export function SummaryPanel({
     <div className="flex-1 min-w-0 flex flex-col bg-surface overflow-hidden">
       {/* Title area */}
       <div className="p-4 border-b border-edge">
+        {/* Client tag: which client this meeting belongs to (Client Memory) */}
+        <div className="flex items-center mb-2">
+          <ClientChip meetingId={meeting.id} />
+        </div>
         {/* <EditableTitle
           title={meetingTitle}
           isEditing={isEditingTitle}
