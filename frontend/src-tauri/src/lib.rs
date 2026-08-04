@@ -812,6 +812,7 @@ pub fn run() {
             clients::commands::memory_fact_set_status,
             clients::commands::memory_fact_delete,
             clients::commands::memory_search,
+            clients::commands::client_timeline,
             // Chat with meetings commands
             chat::commands::chat_send,
             chat::commands::chat_history,

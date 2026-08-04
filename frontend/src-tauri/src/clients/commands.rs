@@ -230,6 +230,41 @@ pub async fn meeting_suggest_client(
     Ok(suggest::suggest(&clients, &meeting.title, &attendee_domains))
 }
 
+/// Everything the client timeline view needs in one round trip.
+#[derive(Debug, serde::Serialize)]
+pub struct ClientTimeline {
+    pub client: Client,
+    /// Meetings tagged with this client, newest first.
+    pub meetings: Vec<crate::database::models::MeetingModel>,
+    /// All memory facts for this client, joined with their meetings.
+    pub facts: Vec<MemoryFactWithMeeting>,
+}
+
+/// The client's timeline: their meetings (newest first) plus every memory
+/// fact, for interleaved rendering on the Clients page.
+#[tauri::command]
+pub async fn client_timeline(
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+) -> Result<ClientTimeline, String> {
+    let pool = state.db_manager.pool();
+    let client = ClientsRepository::get(pool, &client_id)
+        .await
+        .map_err(|e| format!("Failed to load client: {}", e))?
+        .ok_or_else(|| "Client not found".to_string())?;
+    let meetings = MeetingClientsRepository::meetings_for_client(pool, &client_id)
+        .await
+        .map_err(|e| format!("Failed to load client meetings: {}", e))?;
+    let facts = MemoryFactsRepository::for_client(pool, &client_id)
+        .await
+        .map_err(|e| format!("Failed to load client memory: {}", e))?;
+    Ok(ClientTimeline {
+        client,
+        meetings,
+        facts,
+    })
+}
+
 /// Memory facts extracted for one meeting.
 #[tauri::command]
 pub async fn memory_facts_for_meeting(

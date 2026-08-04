@@ -72,6 +72,7 @@ pub const WEBVIEW_COMMANDS: &[&str] = &[
     "chat_send",
     "client_create",
     "client_delete",
+    "client_timeline",
     "client_update",
     "clients_list",
     "meeting_get_client",

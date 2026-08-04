@@ -111,6 +111,22 @@ impl MeetingClientsRepository {
         Ok(())
     }
 
+    /// All meetings tagged with a client, newest first.
+    pub async fn meetings_for_client(
+        pool: &SqlitePool,
+        client_id: &str,
+    ) -> Result<Vec<crate::database::models::MeetingModel>, sqlx::Error> {
+        sqlx::query_as::<_, crate::database::models::MeetingModel>(
+            "SELECT m.id, m.title, m.created_at, m.updated_at, m.folder_path
+             FROM meeting_clients mc JOIN meetings m ON m.id = mc.meeting_id
+             WHERE mc.client_id = ?
+             ORDER BY m.created_at DESC",
+        )
+        .bind(client_id)
+        .fetch_all(pool)
+        .await
+    }
+
     /// The client a meeting is tagged with, if any.
     pub async fn client_for_meeting(
         pool: &SqlitePool,
