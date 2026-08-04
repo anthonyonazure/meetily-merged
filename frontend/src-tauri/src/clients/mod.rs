@@ -10,4 +10,5 @@
 //! the draft-only chase email flow), both reusing `m365`'s plumbing.
 
 pub mod commands;
+pub mod follow_through;
 pub mod suggest;

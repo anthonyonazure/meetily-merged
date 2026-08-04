@@ -106,11 +106,12 @@ pub(crate) async fn resolve_llm_settings(
     })
 }
 
-/// Builds the meeting context (title, transcript, summary markdown) an agent
-/// prompt operates on.
+/// Builds the meeting context (title, transcript, summary markdown, client)
+/// an agent prompt operates on.
 async fn build_agent_context(
     pool: &SqlitePool,
     meeting_id: &str,
+    agent: &AgentDefinition,
 ) -> Result<AgentContext, String> {
     let meeting = MeetingsRepository::get_meeting_metadata(pool, meeting_id)
         .await
@@ -123,7 +124,9 @@ async fn build_agent_context(
             .await
             .map_err(|e| format!("Failed to load transcripts: {}", e))?;
 
-    if total == 0 {
+    // Client-scoped agents work from the client's memory, not the transcript,
+    // so an empty transcript only blocks transcript-driven agents.
+    if total == 0 && !agent.needs_client {
         return Err("This meeting has no transcript yet".to_string());
     }
 
@@ -156,10 +159,39 @@ async fn build_agent_context(
         _ => None,
     };
 
+    let client = MeetingClientsRepository::client_for_meeting(pool, meeting_id)
+        .await
+        .map_err(|e| format!("Failed to read meeting client: {}", e))?;
+
+    let (client_name, client_commitments) = if agent.needs_client {
+        let client = client.ok_or_else(|| {
+            format!("Tag this meeting with a client to run {}", agent.name)
+        })?;
+        let facts = MemoryFactsRepository::open_commitments_for_client(pool, &client.id, 0)
+            .await
+            .map_err(|e| format!("Failed to load open commitments: {}", e))?;
+        let stale = crate::clients::follow_through::stale_commitments(facts, chrono::Utc::now());
+        if stale.is_empty() {
+            return Err(format!(
+                "{} has no open commitments ready to chase (older than {} days or overdue)",
+                client.name,
+                crate::clients::follow_through::CHASE_MIN_AGE_DAYS
+            ));
+        }
+        (
+            Some(client.name),
+            Some(crate::clients::follow_through::commitments_block(&stale)),
+        )
+    } else {
+        (client.map(|c| c.name), None)
+    };
+
     Ok(AgentContext {
         meeting_title: meeting.title,
         transcript,
         summary_markdown,
+        client_name,
+        client_commitments,
     })
 }
 
@@ -192,7 +224,8 @@ fn parse_action_items(raw: &str) -> Option<Vec<ParsedActionItem>> {
 }
 
 /// Extracts the first balanced top-level `[ ... ]` block, respecting strings.
-fn extract_first_json_array(text: &str) -> Option<String> {
+/// Also used by the follow-through command (`crate::clients::follow_through`).
+pub(crate) fn extract_first_json_array(text: &str) -> Option<String> {
     let start = text.find('[')?;
     let bytes = text.as_bytes();
     let mut depth: i64 = 0;
@@ -573,7 +606,7 @@ async fn run_agent_llm(
     app_data_dir: Option<PathBuf>,
 ) -> Result<String, String> {
     let settings = resolve_llm_settings(pool, model_provider).await?;
-    let context = build_agent_context(pool, meeting_id).await?;
+    let context = build_agent_context(pool, meeting_id, agent).await?;
     let user_prompt = (agent.build_user_prompt)(&context);
 
     let client = reqwest::Client::new();

@@ -57,3 +57,19 @@ export interface ClientTimeline {
   meetings: TimelineMeeting[];
   facts: MemoryFactWithMeeting[];
 }
+
+export interface ChaseSuggestion {
+  fact_id: string;
+  subject: string;
+  owner: string | null;
+  due_hint: string | null;
+  age_days: number;
+  nudge: string;
+  chase_subject: string;
+  chase_message: string;
+}
+
+export interface FollowThroughResult {
+  markdown: string;
+  chases: ChaseSuggestion[];
+}

@@ -79,6 +79,24 @@ const Sidebar: React.FC = () => {
   });
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<boolean | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
+  // Stale-commitment badge on the Clients entry: checked once per session
+  // (no polling, no notifications — just a subtle count).
+  const [staleCommitmentCount, setStaleCommitmentCount] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const count = await invoke<number>('memory_stale_open_count', { olderThanDays: 7 });
+        if (!cancelled) setStaleCommitmentCount(count);
+      } catch (error) {
+        console.error('Failed to check stale commitments:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(console.error);
@@ -548,10 +566,15 @@ const Sidebar: React.FC = () => {
                   }`}
               >
                 <Briefcase className="w-5 h-5 text-muted-ink" />
+                {staleCommitmentCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rec text-app text-[10px] leading-4 text-center font-medium">
+                    {staleCommitmentCount}
+                  </span>
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              <p>Clients</p>
+              <p>Clients{staleCommitmentCount > 0 ? ` — ${staleCommitmentCount} commitment${staleCommitmentCount === 1 ? '' : 's'} need a nudge` : ''}</p>
             </TooltipContent>
           </Tooltip>
 
@@ -775,6 +798,14 @@ const Sidebar: React.FC = () => {
                 >
                   <Briefcase className="w-4 h-4 mr-2" />
                   <span>Clients</span>
+                  {staleCommitmentCount > 0 && (
+                    <span
+                      className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-rec text-app text-[10px] leading-[18px] text-center font-medium"
+                      title={`${staleCommitmentCount} open commitment${staleCommitmentCount === 1 ? '' : 's'} older than 7 days`}
+                    >
+                      {staleCommitmentCount}
+                    </span>
+                  )}
                 </div>
                 <UpcomingEvents />
               </>

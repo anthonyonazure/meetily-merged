@@ -1,5 +1,6 @@
 //! Tauri commands for the Client Memory feature.
 
+use crate::clients::follow_through::{self, FollowThroughResult};
 use crate::clients::suggest::{self, ClientSuggestion};
 use crate::database::models::{Client, ClientWithCounts, MemoryFact, MemoryFactWithMeeting};
 use crate::database::repositories::{
@@ -263,6 +264,46 @@ pub async fn client_timeline(
         meetings,
         facts,
     })
+}
+
+/// Runs the follow-through agent for a client from the Clients page: stale
+/// open commitments become nudges plus suggested chase messages. Awaited by
+/// the frontend (a normal LLM round trip); nothing is persisted or sent.
+#[tauri::command]
+pub async fn client_follow_through<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+    model_provider: String,
+    model_name: String,
+) -> Result<FollowThroughResult, String> {
+    log_info!(
+        "client_follow_through called: client={}, provider={}",
+        client_id,
+        model_provider
+    );
+    let app_data_dir = tauri::Manager::path(&app).app_data_dir().ok();
+    follow_through::run_for_client(
+        state.db_manager.pool(),
+        &client_id,
+        &model_provider,
+        &model_name,
+        app_data_dir,
+    )
+    .await
+}
+
+/// Count of open commitments older than `older_than_days` days across all
+/// clients — powers the subtle once-per-session badge on the Clients nav.
+#[tauri::command]
+pub async fn memory_stale_open_count(
+    state: tauri::State<'_, AppState>,
+    older_than_days: Option<i64>,
+) -> Result<i64, String> {
+    let days = older_than_days.unwrap_or(7).max(0);
+    MemoryFactsRepository::stale_open_count(state.db_manager.pool(), days)
+        .await
+        .map_err(|e| format!("Failed to count stale commitments: {}", e))
 }
 
 /// Memory facts extracted for one meeting.

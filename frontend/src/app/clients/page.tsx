@@ -23,6 +23,7 @@ import {
   MemoryFact,
   MemoryFactWithMeeting,
 } from '@/types/clients';
+import { FollowThroughCard } from '@/components/Clients/FollowThroughCard';
 const KIND_META: Record<string, { label: string; icon: typeof ListTodo }> = {
   commitment: { label: 'Commitment', icon: ListTodo },
   decision: { label: 'Decision', icon: Gavel },
@@ -298,6 +299,12 @@ export default function ClientsPage() {
                 ? ` · ${selectedClient.open_commitments} open commitment${selectedClient.open_commitments === 1 ? '' : 's'}`
                 : ''}
             </p>
+
+            <FollowThroughCard
+              clientId={selectedClient.id}
+              clientName={selectedClient.name}
+              openCommitments={selectedClient.open_commitments}
+            />
 
             {timelineLoading && !timeline ? (
               <div className="text-sm text-faint py-8 text-center">Loading timeline…</div>

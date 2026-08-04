@@ -813,6 +813,8 @@ pub fn run() {
             clients::commands::memory_fact_delete,
             clients::commands::memory_search,
             clients::commands::client_timeline,
+            clients::commands::client_follow_through,
+            clients::commands::memory_stale_open_count,
             // Chat with meetings commands
             chat::commands::chat_send,
             chat::commands::chat_history,
