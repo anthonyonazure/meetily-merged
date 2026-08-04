@@ -15,12 +15,12 @@ Owner: Anthony (anthonyonazure). Working doc; Oscar executes, this file tracks o
 
 ## Wave 3 — integrations (explicit opt-in, each sends data OUT only on user action)
 
-6. **M365/Outlook**: Graph OAuth (device code or loopback) — calendar read direct from tenant, and "email summary via Outlook" as an explicit share action. Needs an Entra app registration in Anthony's tenant (his action).
-7. **Google Workspace**: Calendar read + Gmail draft share action. Needs a Google Cloud OAuth client (his action).
+6. **M365/Outlook** — SHIPPED 2026-08-04: device-code Graph OAuth in Rust (tokens in the OS keychain via `keyring`, transparent refresh), next-24h calendarView merged into the sidebar Upcoming list with per-event source badges (Cal / M365) and title+start dedupe, and "email summary via Outlook" as an explicit share action that creates a DRAFT (never sends) and opens it in Outlook web. Ships with a default Entra registration; other tenants can override client id / tenant in Settings → Integrations. Side effect: M365 is calendar support on Windows, where EventKit doesn't exist — Wave 4's "Windows calendar" is now covered for M365 accounts.
+7. **Google Workspace** — stubbed 2026-08-04: Settings → Integrations shows a "coming soon" card that accepts and persists an OAuth client ID, so shipping the integration later is config-plus-code with no settings migration. No Google network code exists yet. Needs a Google Cloud OAuth client (Anthony's action).
 8. **Zoom / Teams / Slack**:
    - Detection: meeting auto-detect already catches them (mic-activity + process-name detection once Maxwell port lands).
-   - Auto-join: open the meeting link from the calendar event at start time.
-   - Share: post summary to a Slack channel / Teams chat as an explicit per-meeting action (webhook or API token, stored in keychain).
+   - Auto-join — SHIPPED 2026-08-04: a 30s scheduler watches both calendar sources; when an event with a meeting link starts within 2 minutes it fires a notification plus an in-app banner with a Join button (prompt-then-open only, no headless joining). Toggle "Prompt to join from calendar" in Settings → Integrations, default on. This also closes the Wave 2 calendar-v1 TODO (auto-start prompt scheduler + dedupe).
+   - Share — SHIPPED 2026-08-04: per-meeting "Send summary to Slack/Teams" via user-supplied incoming webhooks (HTTPS-only, stored in the OS keychain), explicit action per post, nothing automatic.
 9. **Voiceprint speaker naming** (mimi Layer B): remember known voices so "Speaker 2" becomes "Dana" automatically in future meetings.
 
 ## Wave 4 — platform
