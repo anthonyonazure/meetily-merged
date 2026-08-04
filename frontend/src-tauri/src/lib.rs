@@ -10,8 +10,8 @@ use std::sync::Mutex as StdMutex;
 #[tauri::command]
 async fn debug_check_update() -> Result<String, String> {
     const ENDPOINTS: &[(&str, &str)] = &[(
-        "Zackriya GitHub Releases",
-        "https://github.com/Zackriya-Solutions/meeting-minutes/releases/latest/download/latest.json",
+        "meetily++ GitHub Releases",
+        "https://github.com/anthonyonazure/meetily-merged/releases/latest/download/latest.json",
     )];
     let current_version = env!("CARGO_PKG_VERSION");
 

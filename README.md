@@ -44,7 +44,7 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 
 ---
 
-> **About this fork** — This is an enhanced, security-audited build of [Meetily](https://github.com/Zackriya-Solutions/meeting-minutes) (upstream v0.4.0) that merges the best community fork work into one tree. Every merged fork was independently audited line-by-line for malicious code before inclusion. On top of upstream:
+> **About this fork (meetily++)** — This is **meetily++**, an enhanced, security-audited build of [Meetily](https://github.com/Zackriya-Solutions/meeting-minutes) (upstream v0.4.0) that merges the best community fork work into one tree. Every merged fork was independently audited line-by-line for malicious code before inclusion. On top of upstream:
 >
 > - **Meeting Agents (new):** a library of on-device AI agents — a Follow-up Drafter, an automatic Action Tracker with a cross-meeting actions view, and a Decision Log. All run through your configured local/model provider; nothing is ever sent anywhere. See [docs/AGENTS_DESIGN.md](docs/AGENTS_DESIGN.md).
 > - **Features** (from [AzimovS/meetily](https://github.com/AzimovS/meetily)): remote transcription provider with connection test and retry, speaker labels (You/Others), meeting auto-detect (macOS), transcription failures surfaced instead of swallowed, sharper specificity-enforcing summary prompts, TownHall template, analytics/telemetry fully removed.
