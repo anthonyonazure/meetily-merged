@@ -8,7 +8,9 @@
 use crate::agents::registry::{self, AgentContext, AgentDefinition, AgentOutputKind};
 use crate::database::repositories::{
     agent::{ActionItemsRepository, AgentRunsRepository, AgentSettingsRepository},
+    client::MeetingClientsRepository,
     meeting::MeetingsRepository,
+    memory::MemoryFactsRepository,
     setting::SettingsRepository,
     summary::SummaryProcessesRepository,
 };
@@ -222,6 +224,123 @@ fn extract_first_json_array(text: &str) -> Option<String> {
     None
 }
 
+/// One parsed Client Memory fact. Tolerant of near-miss key names and value
+/// shapes; elements that cannot be salvaged are skipped individually rather
+/// than failing the whole array.
+#[derive(Debug, PartialEq)]
+pub(crate) struct ParsedMemoryFact {
+    pub(crate) kind: String,
+    pub(crate) subject: String,
+    pub(crate) detail: String,
+    pub(crate) owner: Option<String>,
+    pub(crate) due_hint: Option<String>,
+    pub(crate) amount: Option<String>,
+}
+
+const MEMORY_FACT_KINDS: &[&str] = &["commitment", "decision", "figure", "note"];
+
+fn value_to_trimmed_string(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        }
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+fn first_string(object: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| value_to_trimmed_string(&object[*key]))
+}
+
+/// Converts one JSON element into a fact, or None when it has no substance.
+fn memory_fact_from_value(value: &serde_json::Value) -> Option<ParsedMemoryFact> {
+    if !value.is_object() {
+        return None;
+    }
+    let kind_raw = first_string(value, &["kind", "type", "category"])
+        .unwrap_or_default()
+        .to_lowercase();
+    // Tolerate plural/verbose kinds ("commitments", "decision made"); unknown
+    // kinds degrade to "note" instead of dropping the fact.
+    let kind = MEMORY_FACT_KINDS
+        .iter()
+        .find(|k| kind_raw.starts_with(**k))
+        .copied()
+        .unwrap_or("note")
+        .to_string();
+
+    let subject = first_string(value, &["subject", "title", "topic"]);
+    let detail = first_string(value, &["detail", "description", "text", "content"]);
+    let (subject, detail) = match (subject, detail) {
+        (Some(s), Some(d)) => (s, d),
+        // Only one of the two present: use it for both label and substance.
+        (Some(s), None) => (s.clone(), s),
+        (None, Some(d)) => {
+            let label: String = d.chars().take(80).collect();
+            (label, d)
+        }
+        (None, None) => return None,
+    };
+
+    Some(ParsedMemoryFact {
+        kind,
+        subject,
+        detail,
+        owner: first_string(value, &["owner", "assignee", "who"]),
+        due_hint: first_string(value, &["due_hint", "due", "due_date", "deadline"]),
+        amount: first_string(value, &["amount", "value", "figure"]),
+    })
+}
+
+/// Tolerantly parses the LLM output into memory facts, mirroring
+/// `parse_action_items`: strips fences/prose, takes the first balanced JSON
+/// array, then salvages each element independently. Returns None when no
+/// parsable array exists (the raw output is then stored as the run result).
+pub(crate) fn parse_memory_facts(raw: &str) -> Option<Vec<ParsedMemoryFact>> {
+    let cleaned = crate::summary::processor::clean_llm_markdown_output(raw);
+    let candidate =
+        extract_first_json_array(&cleaned).or_else(|| extract_first_json_array(raw))?;
+    let values: Vec<serde_json::Value> = serde_json::from_str(&candidate).ok()?;
+    Some(values.iter().filter_map(memory_fact_from_value).collect())
+}
+
+/// Renders parsed memory facts as the run's markdown output, grouped by kind.
+fn memory_facts_to_markdown(facts: &[ParsedMemoryFact]) -> String {
+    if facts.is_empty() {
+        return "## Client Memory\n\nNothing worth remembering was found in this meeting."
+            .to_string();
+    }
+    let mut md = String::from("## Client Memory\n");
+    for (kind, heading) in [
+        ("commitment", "Commitments"),
+        ("decision", "Decisions"),
+        ("figure", "Figures"),
+        ("note", "Notes"),
+    ] {
+        let group: Vec<&ParsedMemoryFact> = facts.iter().filter(|f| f.kind == kind).collect();
+        if group.is_empty() {
+            continue;
+        }
+        md.push_str(&format!("\n### {}\n\n", heading));
+        for fact in group {
+            md.push_str(&format!("- **{}** — {}", fact.subject, fact.detail));
+            if let Some(owner) = fact.owner.as_deref() {
+                md.push_str(&format!(" (owner: {})", owner));
+            }
+            if let Some(due) = fact.due_hint.as_deref() {
+                md.push_str(&format!(" (due: {})", due));
+            }
+            if let Some(amount) = fact.amount.as_deref() {
+                md.push_str(&format!(" ({})", amount));
+            }
+            md.push('\n');
+        }
+    }
+    md
+}
+
 /// Renders parsed action items as the run's markdown output.
 fn action_items_to_markdown(items: &[ParsedActionItem]) -> String {
     if items.is_empty() {
@@ -371,6 +490,63 @@ async fn execute_run(
                         raw_output.trim().to_string()
                     }
                 },
+                AgentOutputKind::MemoryFacts => match parse_memory_facts(&raw_output) {
+                    Some(facts) => {
+                        // Denormalize the meeting's client tag onto each fact at
+                        // extraction time, so client timelines survive retags.
+                        let client_id = match MeetingClientsRepository::client_for_meeting(
+                            &pool,
+                            &meeting_id,
+                        )
+                        .await
+                        {
+                            Ok(client) => client.map(|c| c.id),
+                            Err(e) => {
+                                warn!("Failed to read meeting client for fact tagging: {}", e);
+                                None
+                            }
+                        };
+                        if let Err(e) = MemoryFactsRepository::clear_replaceable_agent_facts(
+                            &pool,
+                            &meeting_id,
+                        )
+                        .await
+                        {
+                            error!("Failed to clear previous memory facts: {}", e);
+                        }
+                        for fact in &facts {
+                            if let Err(e) = MemoryFactsRepository::insert(
+                                &pool,
+                                &meeting_id,
+                                client_id.as_deref(),
+                                Some(&run_id),
+                                &fact.kind,
+                                &fact.subject,
+                                &fact.detail,
+                                fact.owner.as_deref(),
+                                fact.due_hint.as_deref(),
+                                fact.amount.as_deref(),
+                            )
+                            .await
+                            {
+                                error!("Failed to insert memory fact: {}", e);
+                            }
+                        }
+                        info!(
+                            "Agent run {} extracted {} memory fact(s)",
+                            run_id,
+                            facts.len()
+                        );
+                        memory_facts_to_markdown(&facts)
+                    }
+                    None => {
+                        warn!(
+                            "Agent run {} output was not parsable as a memory fact array; storing raw output",
+                            run_id
+                        );
+                        raw_output.trim().to_string()
+                    }
+                },
             };
 
             if let Err(e) = AgentRunsRepository::complete_run(&pool, &run_id, &output_md).await {
@@ -510,6 +686,80 @@ mod tests {
         let items = parse_action_items(raw).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].description, "Real task");
+    }
+
+    #[test]
+    fn test_parse_memory_facts_full_shape() {
+        let raw = r#"```json
+[{"kind": "commitment", "subject": "Quote", "detail": "Send revised quote", "owner": "You", "due_hint": "by Friday", "amount": null},
+ {"kind": "figure", "subject": "Budget", "detail": "Annual budget agreed", "amount": "$12,000"}]
+```"#;
+        let facts = parse_memory_facts(raw).unwrap();
+        assert_eq!(facts.len(), 2);
+        assert_eq!(facts[0].kind, "commitment");
+        assert_eq!(facts[0].owner.as_deref(), Some("You"));
+        assert_eq!(facts[1].amount.as_deref(), Some("$12,000"));
+    }
+
+    #[test]
+    fn test_parse_memory_facts_tolerates_aliases_and_kinds() {
+        let raw = r#"[{"type": "decisions", "title": "Vendor", "description": "Chose vendor A"},
+                      {"kind": "something-weird", "subject": "Tidbit", "detail": "Client prefers mornings"},
+                      {"kind": "figure", "subject": "Seats", "detail": "Seat count", "amount": 15}]"#;
+        let facts = parse_memory_facts(raw).unwrap();
+        assert_eq!(facts.len(), 3);
+        assert_eq!(facts[0].kind, "decision");
+        assert_eq!(facts[0].subject, "Vendor");
+        assert_eq!(facts[1].kind, "note", "unknown kinds degrade to note");
+        assert_eq!(facts[2].amount.as_deref(), Some("15"), "numeric amounts become strings");
+    }
+
+    #[test]
+    fn test_parse_memory_facts_salvages_partial_elements() {
+        let raw = r#"[{"subject": "Only a label"},
+                      {"detail": "Only substance, no subject"},
+                      {"owner": "nobody"},
+                      "not an object"]"#;
+        let facts = parse_memory_facts(raw).unwrap();
+        assert_eq!(facts.len(), 2, "empty and non-object elements are skipped");
+        assert_eq!(facts[0].subject, "Only a label");
+        assert_eq!(facts[0].detail, "Only a label");
+        assert_eq!(facts[1].subject, "Only substance, no subject");
+    }
+
+    #[test]
+    fn test_parse_memory_facts_failure_and_empty() {
+        assert!(parse_memory_facts("I found nothing to extract.").is_none());
+        assert!(parse_memory_facts("[unclosed").is_none());
+        assert!(parse_memory_facts("```json\n[]\n```").unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_memory_facts_markdown_groups_by_kind() {
+        let facts = vec![
+            ParsedMemoryFact {
+                kind: "note".to_string(),
+                subject: "Preference".to_string(),
+                detail: "Prefers email".to_string(),
+                owner: None,
+                due_hint: None,
+                amount: None,
+            },
+            ParsedMemoryFact {
+                kind: "commitment".to_string(),
+                subject: "Quote".to_string(),
+                detail: "Send quote".to_string(),
+                owner: Some("You".to_string()),
+                due_hint: Some("Friday".to_string()),
+                amount: None,
+            },
+        ];
+        let md = memory_facts_to_markdown(&facts);
+        let commitments_at = md.find("### Commitments").unwrap();
+        let notes_at = md.find("### Notes").unwrap();
+        assert!(commitments_at < notes_at, "commitments render before notes");
+        assert!(md.contains("**Quote** — Send quote (owner: You) (due: Friday)"));
+        assert!(memory_facts_to_markdown(&[]).contains("Nothing worth remembering"));
     }
 
     #[test]

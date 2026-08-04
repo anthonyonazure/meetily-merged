@@ -182,6 +182,46 @@ pub struct ClientWithCounts {
     pub open_commitments: i64,
 }
 
+/// One structured Client Memory fact extracted from a meeting.
+/// `kind` is commitment | decision | figure | note. `status` is
+/// open | done | dismissed for commitments and 'na' for everything else.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct MemoryFact {
+    pub id: String,
+    pub meeting_id: String,
+    pub client_id: Option<String>,
+    pub agent_run_id: Option<String>,
+    pub kind: String,
+    pub subject: String,
+    pub detail: String,
+    pub owner: Option<String>,
+    pub due_hint: Option<String>,
+    pub amount: Option<String>,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Memory fact joined with its meeting, for client timelines and search.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct MemoryFactWithMeeting {
+    pub id: String,
+    pub meeting_id: String,
+    pub client_id: Option<String>,
+    pub agent_run_id: Option<String>,
+    pub kind: String,
+    pub subject: String,
+    pub detail: String,
+    pub owner: Option<String>,
+    pub due_hint: Option<String>,
+    pub amount: Option<String>,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub meeting_title: String,
+    pub meeting_created_at: DateTimeUtc,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AgentSettingRow {
     pub agent_id: String,

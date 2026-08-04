@@ -806,6 +806,12 @@ pub fn run() {
             clients::commands::meeting_set_client,
             clients::commands::meeting_get_client,
             clients::commands::meeting_suggest_client,
+            // Client Memory facts (extracted by the memory_extractor agent)
+            clients::commands::memory_facts_for_meeting,
+            clients::commands::memory_facts_for_client,
+            clients::commands::memory_fact_set_status,
+            clients::commands::memory_fact_delete,
+            clients::commands::memory_search,
             // Chat with meetings commands
             chat::commands::chat_send,
             chat::commands::chat_history,

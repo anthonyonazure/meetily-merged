@@ -1,14 +1,18 @@
 //! Tauri commands for the Client Memory feature.
 
 use crate::clients::suggest::{self, ClientSuggestion};
-use crate::database::models::{Client, ClientWithCounts};
+use crate::database::models::{Client, ClientWithCounts, MemoryFact, MemoryFactWithMeeting};
 use crate::database::repositories::{
     client::{ClientsRepository, MeetingClientsRepository},
     meeting::MeetingsRepository,
+    memory::MemoryFactsRepository,
 };
 use crate::m365;
 use crate::state::AppState;
 use log::{info as log_info, warn as log_warn};
+
+/// Cap for memory_search results, to keep the IPC payload bounded.
+const MEMORY_SEARCH_LIMIT: i64 = 200;
 
 /// Window around a meeting's creation time used when matching calendar-event
 /// attendees to the meeting.
@@ -92,14 +96,19 @@ pub async fn client_update(
         .ok_or_else(|| "Client not found".to_string())
 }
 
-/// Deletes a client. Tagged meetings are unlinked but kept.
+/// Deletes a client. Tagged meetings are unlinked but kept, and extracted
+/// memory facts stay on their meetings (client link cleared).
 #[tauri::command]
 pub async fn client_delete(
     state: tauri::State<'_, AppState>,
     client_id: String,
 ) -> Result<bool, String> {
     log_info!("client_delete called: {}", client_id);
-    ClientsRepository::delete(state.db_manager.pool(), &client_id)
+    let pool = state.db_manager.pool();
+    MemoryFactsRepository::unlink_client(pool, &client_id)
+        .await
+        .map_err(|e| format!("Failed to unlink client facts: {}", e))?;
+    ClientsRepository::delete(pool, &client_id)
         .await
         .map_err(|e| format!("Failed to delete client: {}", e))
 }
@@ -219,4 +228,75 @@ pub async fn meeting_suggest_client(
         .collect();
 
     Ok(suggest::suggest(&clients, &meeting.title, &attendee_domains))
+}
+
+/// Memory facts extracted for one meeting.
+#[tauri::command]
+pub async fn memory_facts_for_meeting(
+    state: tauri::State<'_, AppState>,
+    meeting_id: String,
+) -> Result<Vec<MemoryFact>, String> {
+    MemoryFactsRepository::for_meeting(state.db_manager.pool(), &meeting_id)
+        .await
+        .map_err(|e| format!("Failed to load memory facts: {}", e))
+}
+
+/// All memory facts for a client, joined with their meetings (newest meeting
+/// first) — the raw material of the client timeline.
+#[tauri::command]
+pub async fn memory_facts_for_client(
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+) -> Result<Vec<MemoryFactWithMeeting>, String> {
+    MemoryFactsRepository::for_client(state.db_manager.pool(), &client_id)
+        .await
+        .map_err(|e| format!("Failed to load client memory: {}", e))
+}
+
+/// Sets a commitment's lifecycle status: open, done, or dismissed.
+#[tauri::command]
+pub async fn memory_fact_set_status(
+    state: tauri::State<'_, AppState>,
+    fact_id: String,
+    status: String,
+) -> Result<bool, String> {
+    if !matches!(status.as_str(), "open" | "done" | "dismissed") {
+        return Err(format!("Invalid memory fact status: {}", status));
+    }
+    MemoryFactsRepository::set_status(state.db_manager.pool(), &fact_id, &status)
+        .await
+        .map_err(|e| format!("Failed to update memory fact: {}", e))
+}
+
+/// Deletes a memory fact.
+#[tauri::command]
+pub async fn memory_fact_delete(
+    state: tauri::State<'_, AppState>,
+    fact_id: String,
+) -> Result<bool, String> {
+    MemoryFactsRepository::delete(state.db_manager.pool(), &fact_id)
+        .await
+        .map_err(|e| format!("Failed to delete memory fact: {}", e))
+}
+
+/// Case-insensitive substring search over fact subjects and details, optionally
+/// scoped to one client.
+#[tauri::command]
+pub async fn memory_search(
+    state: tauri::State<'_, AppState>,
+    query: String,
+    client_id: Option<String>,
+) -> Result<Vec<MemoryFactWithMeeting>, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    MemoryFactsRepository::search(
+        state.db_manager.pool(),
+        query,
+        client_id.as_deref(),
+        MEMORY_SEARCH_LIMIT,
+    )
+    .await
+    .map_err(|e| format!("Failed to search memory: {}", e))
 }

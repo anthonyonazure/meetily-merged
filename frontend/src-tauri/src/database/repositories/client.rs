@@ -6,12 +6,14 @@ use uuid::Uuid;
 pub struct ClientsRepository;
 
 impl ClientsRepository {
-    /// Lists clients with meeting counts, alphabetical by name.
+    /// Lists clients with meeting and open-commitment counts, alphabetical by
+    /// name.
     pub async fn list_with_counts(pool: &SqlitePool) -> Result<Vec<ClientWithCounts>, sqlx::Error> {
         sqlx::query_as::<_, ClientWithCounts>(
             "SELECT c.id, c.name, c.domain, c.notes, c.created_at,
                     (SELECT COUNT(*) FROM meeting_clients mc WHERE mc.client_id = c.id) AS meeting_count,
-                    0 AS open_commitments
+                    (SELECT COUNT(*) FROM memory_facts f
+                     WHERE f.client_id = c.id AND f.kind = 'commitment' AND f.status = 'open') AS open_commitments
              FROM clients c
              ORDER BY c.name COLLATE NOCASE ASC",
         )

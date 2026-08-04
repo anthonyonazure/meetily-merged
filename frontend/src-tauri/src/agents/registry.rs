@@ -15,6 +15,10 @@ pub enum AgentOutputKind {
     /// Output is parsed as a JSON array of action items; parsed items are
     /// inserted into `action_items` (raw output is kept when parsing fails).
     ActionItems,
+    /// Output is parsed as a JSON array of Client Memory facts; parsed facts
+    /// are inserted into `memory_facts` (raw output is kept when parsing
+    /// fails), tagged with the meeting's client at extraction time.
+    MemoryFacts,
 }
 
 /// Inputs available to prompt builders.
@@ -73,6 +77,13 @@ fn decision_log_prompt(context: &AgentContext) -> String {
     )
 }
 
+fn memory_extractor_prompt(context: &AgentContext) -> String {
+    format!(
+        "Extract the durable memory facts from this meeting.\n\n{}",
+        shared_context_block(context)
+    )
+}
+
 pub const AGENTS: &[AgentDefinition] = &[
     AgentDefinition {
         id: "followup_drafter",
@@ -116,6 +127,28 @@ Only include decisions actually reached in the transcript; skip open questions. 
 If no decisions were made, output \"## Decisions\" followed by \"- No decisions were recorded in this meeting.\" \
 Output only the markdown, no preamble.",
         build_user_prompt: decision_log_prompt,
+    },
+    AgentDefinition {
+        id: "memory_extractor",
+        name: "Memory Extractor",
+        description: "Distills the meeting into durable facts — commitments, decisions, figures, notes — that build the client's running memory.",
+        output_kind: AgentOutputKind::MemoryFacts,
+        auto_run_default: true,
+        system_prompt: "You extract durable facts from meeting transcripts for a client memory system. \
+Respond with ONLY a JSON array inside a fenced code block. Each element must be an object with: \
+\"kind\" (one of \"commitment\", \"decision\", \"figure\", \"note\"), \
+\"subject\" (string, required, a short label like \"Contract renewal\"), \
+\"detail\" (string, required, one or two sentences of substance), \
+\"owner\" (string or null, who it belongs to, e.g. \"You\" or a name from the transcript), \
+\"due_hint\" (string or null, deadline wording exactly as spoken, e.g. \"by end of month\"), \
+\"amount\" (string or null, the figure for kind \"figure\", e.g. \"$12,000\" or \"15 seats\"). \
+Kinds: a commitment is something someone promised to do; a decision is a choice that was agreed; \
+a figure is a number, amount, or date that matters commercially; a note is any other fact worth \
+remembering next time (preferences, constraints, context, names). \
+Only include things actually said in the transcript. Do not invent anything. \
+If there is nothing worth remembering, return an empty array []. \
+Example:\n```json\n[{\"kind\": \"commitment\", \"subject\": \"Revised quote\", \"detail\": \"You promised to send the revised quote.\", \"owner\": \"You\", \"due_hint\": \"by Friday\", \"amount\": null}]\n```",
+        build_user_prompt: memory_extractor_prompt,
     },
 ];
 
