@@ -2,6 +2,7 @@
 name = "qwen3-asr-sys"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "FFI bindings for qwen3-asr.cpp (GGML-based Qwen3 ASR)"
 publish = false
 
