@@ -474,7 +474,7 @@ async fn run_chat_llm(
     let (user_prompt, _) = crate::profiles::enforce::redact_for(&effective, &user_prompt);
 
     let client = reqwest::Client::new();
-    let raw = generate_summary(
+    let llm_call = generate_summary(
         &client,
         &settings.provider,
         model_name,
@@ -488,8 +488,13 @@ async fn run_chat_llm(
         settings.top_p,
         app_data_dir.as_ref(),
         None,
-    )
-    .await?;
+    );
+    // Attribute the request to the meeting when the question is about one, so the
+    // per-meeting network answer covers chat as well as summaries.
+    let raw = match scope.meeting_id() {
+        Some(meeting_id) => crate::network::with_meeting(meeting_id, llm_call).await?,
+        None => llm_call.await?,
+    };
 
     Ok(crate::summary::processor::clean_llm_markdown_output(&raw))
 }

@@ -255,39 +255,50 @@ pub async fn generate_summary(
 
     info!("🐞 LLM Request to {}: model={}", provider_name(provider), model_name);
 
+    // Serialised once, so the byte count the network panel reports is the exact
+    // size of what went out rather than an estimate. The Content-Type header is
+    // already set above, so sending the bytes directly is equivalent to `.json()`.
+    let body_bytes = serde_json::to_vec(&request_body)
+        .map_err(|e| format!("Failed to encode the LLM request: {}", e))?;
+    let bytes_out = body_bytes.len() as u64;
+
     // Send request with timeout and cancellation support
     let request_future = client
-        .post(api_url)
+        .post(&api_url)
         .headers(headers)
-        .json(&request_body)
+        .body(body_bytes)
         .timeout(REQUEST_TIMEOUT_DURATION)
         .send();
 
     // Use tokio::select to race between cancellation and request completion
-    let response = if let Some(token) = cancellation_token {
+    let outcome = if let Some(token) = cancellation_token {
         tokio::select! {
-            result = request_future => {
-                result.map_err(|e| {
-                    if e.is_timeout() {
-                        format!("LLM request timed out after 60 seconds")
-                    } else {
-                        format!("Failed to send request to LLM: {}", e)
-                    }
-                })?
-            }
+            result = request_future => result,
             _ = token.cancelled() => {
                 return Err("Summary generation was cancelled".to_string());
             }
         }
     } else {
-        request_future.await.map_err(|e| {
-            if e.is_timeout() {
-                format!("LLM request timed out after 60 seconds")
-            } else {
-                format!("Failed to send request to LLM: {}", e)
-            }
-        })?
+        request_future.await
     };
+
+    // Network transparency: this is the call that carries transcript text to a
+    // model, so it is the one an operator most needs to see.
+    crate::network::observe(
+        crate::network::Purpose::LlmCall,
+        &api_url,
+        "POST",
+        bytes_out,
+        &outcome,
+    );
+
+    let response = outcome.map_err(|e| {
+        if e.is_timeout() {
+            format!("LLM request timed out after 60 seconds")
+        } else {
+            format!("Failed to send request to LLM: {}", e)
+        }
+    })?;
 
     if !response.status().is_success() {
         let error_body = response

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock, Receipt, FileText, Search } from 'lucide-react';
+import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock, Receipt, FileText, Search, Activity } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
@@ -18,6 +18,7 @@ import { BillingSettingsPanel } from '@/components/Billing/BillingSettingsPanel'
 import { DeliverablesPanel } from '@/components/Branding/DeliverablesPanel';
 import { TemplateMappingPanel } from '@/components/MeetingType/TemplateMappingPanel';
 import { SemanticSearchSettings } from '@/components/Search/SemanticSearchSettings';
+import { NetworkActivityPanel } from '@/components/Network/NetworkActivityPanel';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -34,6 +35,7 @@ const TABS = [
   { value: 'search', label: 'Search', icon: Search },
   { value: 'consent', label: 'Consent', icon: ShieldCheck },
   { value: 'privacy', label: 'Privacy profiles', icon: Lock },
+  { value: 'network', label: 'Network activity', icon: Activity },
   { value: 'beta', label: 'Beta', icon: FlaskConical }
 ] as const;
 
@@ -163,6 +165,9 @@ export default function SettingsPage() {
             </TabsContent>
             <TabsContent value="privacy">
               <PrivacyProfilesPanel />
+            </TabsContent>
+            <TabsContent value="network">
+              <NetworkActivityPanel />
             </TabsContent>
             <TabsContent value="beta" className="mt-6">
               <BetaSettings />

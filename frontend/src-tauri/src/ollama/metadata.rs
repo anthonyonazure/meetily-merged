@@ -150,12 +150,20 @@ async fn fetch_model_info(
         "verbose": true
     });
 
-    let response = client
+    let outcome = client
         .post(&url)
         .json(&payload)
         .timeout(Duration::from_secs(5))
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ProviderMetadata,
+        &url,
+        "POST",
+        0,
+        &outcome,
+    );
+    let response = outcome
         .map_err(|e| {
             if e.is_timeout() {
                 format!("Request timed out while fetching metadata for {}", model_name)

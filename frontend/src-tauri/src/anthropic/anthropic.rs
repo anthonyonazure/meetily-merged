@@ -99,13 +99,21 @@ pub async fn get_anthropic_models(api_key: Option<String>) -> Result<Vec<Anthrop
     log::info!("Fetching Anthropic models from API...");
     let client = reqwest::Client::new();
 
-    let response = match client
+    let outcome = client
         .get("https://api.anthropic.com/v1/models")
         .header("x-api-key", &api_key)
         .header("anthropic-version", "2023-06-01")
         .timeout(Duration::from_secs(5))
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ProviderMetadata,
+        "https://api.anthropic.com/v1/models",
+        "GET",
+        0,
+        &outcome,
+    );
+    let response = match outcome
     {
         Ok(resp) => resp,
         Err(e) => {

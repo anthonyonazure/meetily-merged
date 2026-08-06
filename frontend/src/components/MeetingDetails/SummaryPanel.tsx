@@ -9,6 +9,7 @@ import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
 import { ShareSummaryMenu } from './ShareSummaryMenu';
 import { MeetingProfileChip } from '@/components/Privacy/MeetingProfileChip';
+import { MeetingNetworkChip } from '@/components/Network/MeetingNetworkChip';
 import { ClientChip } from '@/components/Clients/ClientChip';
 import { MeetingCostChip } from '@/components/Billing/MeetingCostChip';
 import { MeetingTypeChip } from '@/components/MeetingType/MeetingTypeChip';
@@ -284,6 +285,11 @@ export function SummaryPanel({
             selectedTemplate={selectedTemplate}
             refreshKey={profileRefreshKey}
           />
+        </div>
+        {/* Whether anything from this meeting left the machine, from the app's own
+            record of the requests it made. */}
+        <div className="mb-2">
+          <MeetingNetworkChip meetingId={meeting.id} />
         </div>
         {/* <EditableTitle
           title={meetingTitle}

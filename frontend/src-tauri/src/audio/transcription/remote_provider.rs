@@ -149,13 +149,23 @@ impl RemoteProvider {
             form = form.text("language", lang.to_string());
         }
 
-        let response = match self
+        // Network transparency: this request carries recorded audio off the device,
+        // which is the single most consequential thing this app can do.
+        let outcome = self
             .client
             .post(&self.url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .multipart(form)
             .send()
-            .await
+            .await;
+        crate::network::observe(
+            crate::network::Purpose::Transcription,
+            &self.url,
+            "POST",
+            wav_bytes.len() as u64,
+            &outcome,
+        );
+        let response = match outcome
         {
             Ok(resp) => resp,
             // Transport-level failures (connect/timeout/TLS/read): retryable.

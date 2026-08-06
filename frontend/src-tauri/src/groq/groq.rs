@@ -94,12 +94,20 @@ pub async fn get_groq_models(api_key: Option<String>) -> Result<Vec<GroqModel>, 
     log::info!("Fetching Groq models from API...");
     let client = reqwest::Client::new();
 
-    let response = match client
+    let outcome = client
         .get("https://api.groq.com/openai/v1/models")
         .header("Authorization", format!("Bearer {}", api_key))
         .timeout(Duration::from_secs(5))
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ProviderMetadata,
+        "https://api.groq.com/openai/v1/models",
+        "GET",
+        0,
+        &outcome,
+    );
+    let response = match outcome
     {
         Ok(resp) => resp,
         Err(e) => {

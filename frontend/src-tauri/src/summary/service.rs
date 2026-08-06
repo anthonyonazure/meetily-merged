@@ -505,7 +505,10 @@ impl SummaryService {
         };
 
         let client = reqwest::Client::new();
-        let result = generate_meeting_summary(
+        // `with_meeting` attaches the meeting id to every request this work makes,
+        // so the network panel can answer "did anything from this meeting leave the
+        // device?" without threading an id through the shared LLM client.
+        let result = crate::network::with_meeting(&meeting_id, generate_meeting_summary(
             &client,
             &provider,
             &model_name,
@@ -525,7 +528,7 @@ impl SummaryService {
             summary_language.as_deref(),
             detected_summary_language.as_deref(),
             cached_english.as_deref(),
-        )
+        ))
         .await;
 
         let duration = start_time.elapsed().as_secs_f64();

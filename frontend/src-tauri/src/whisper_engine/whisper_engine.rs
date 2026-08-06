@@ -967,7 +967,15 @@ impl WhisperEngine {
         let client = Client::new();
         
         log::info!("Sending GET request to: {}", model_url);
-        let response = client.get(model_url).send().await
+        let outcome = client.get(model_url).send().await;
+        crate::network::observe(
+            crate::network::Purpose::ModelDownload,
+            model_url,
+            "GET",
+            0,
+            &outcome,
+        );
+        let response = outcome
             .map_err(|e| anyhow!("Failed to start download: {}", e))?;
         
         log::info!("Received response with status: {}", response.status());

@@ -151,12 +151,19 @@ pub async fn begin_device_login<R: Runtime>(
         "https://login.microsoftonline.com/{}/oauth2/v2.0/devicecode",
         config.tenant
     );
-    let response = client
+    let outcome = client
         .post(&device_url)
         .form(&[("client_id", config.client_id.as_str()), ("scope", SCOPES_WITH_OFFLINE)])
         .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft sign-in: {}", e))?;
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::GraphApi,
+        &device_url,
+        "POST",
+        0,
+        &outcome,
+    );
+    let response = outcome.map_err(|e| format!("Could not reach Microsoft sign-in: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -236,6 +243,13 @@ async fn poll_for_tokens<R: Runtime>(
             ])
             .send()
             .await;
+        crate::network::observe(
+            crate::network::Purpose::GraphApi,
+            &token_url,
+            "POST",
+            0,
+            &response,
+        );
 
         let response = match response {
             Ok(r) => r,
@@ -358,7 +372,7 @@ async fn refresh_locked(tokens: TokenSet) -> Result<String, String> {
         "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
         tokens.tenant
     );
-    let response = client
+    let outcome = client
         .post(&token_url)
         .form(&[
             ("grant_type", "refresh_token"),
@@ -367,8 +381,16 @@ async fn refresh_locked(tokens: TokenSet) -> Result<String, String> {
             ("scope", super::SCOPES),
         ])
         .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft sign-in to refresh: {}", e))?;
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::GraphApi,
+        &token_url,
+        "POST",
+        0,
+        &outcome,
+    );
+    let response =
+        outcome.map_err(|e| format!("Could not reach Microsoft sign-in to refresh: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();

@@ -40,7 +40,9 @@ async fn probe_endpoint(
     report: &mut String,
 ) {
     // Step 1: Fetch latest.json
-    let response = match client.get(url).send().await {
+    let outcome = client.get(url).send().await;
+    network::observe(network::Purpose::UpdateCheck, url, "GET", 0, &outcome);
+    let response = match outcome {
         Ok(r) => r,
         Err(e) => {
             report.push_str(&format!(
@@ -170,6 +172,7 @@ pub mod detection;
 pub mod dictation;
 pub mod embeddings;
 pub mod m365;
+pub mod network;
 pub mod meeting_type;
 pub mod notifications;
 pub mod polish;
@@ -637,6 +640,10 @@ pub fn run() {
             })
             .expect("Failed to initialize database");
 
+            // Network transparency: give the recorder a pool to write to before
+            // anything can make an HTTP request.
+            network::register_pool(_app.state::<state::AppState>().db_manager.pool().clone());
+
             // Initialize bundled templates directory for dynamic template discovery
             log::info!("Initializing bundled templates directory...");
             if let Ok(resource_path) = _app.handle().path().resource_dir() {
@@ -842,6 +849,12 @@ pub fn run() {
             embeddings::commands::embeddings_reindex,
             embeddings::commands::embeddings_settings_get,
             embeddings::commands::embeddings_settings_set,
+
+            // Network transparency (read-only; adds no outbound host)
+            network::commands::network_events_recent,
+            network::commands::network_events_for_meeting,
+            network::commands::network_expected_hosts,
+            network::commands::network_events_export,
 
             // Recording consent
             consent::commands::consent_get_settings,

@@ -17,6 +17,28 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("Failed to create HTTP client: {}", e))
 }
 
+/// Sends a Graph request and records it in the network log.
+///
+/// Every Graph call goes through here rather than each call site remembering to
+/// record itself: instrumentation that depends on being remembered is
+/// instrumentation that goes stale the next time a call is added.
+async fn send_observed(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    url: &str,
+    bytes_out: u64,
+) -> Result<reqwest::Response, String> {
+    let outcome = builder.send().await;
+    crate::network::observe(
+        crate::network::Purpose::GraphApi,
+        url,
+        method,
+        bytes_out,
+        &outcome,
+    );
+    outcome.map_err(|e| format!("Could not reach Microsoft Graph: {}", e))
+}
+
 /// Maps a non-success Graph response into an error string. The "HTTP 401"
 /// marker is load-bearing: command wrappers use it to trigger one forced
 /// token refresh + retry.
@@ -32,12 +54,14 @@ async fn error_for(response: reqwest::Response) -> String {
 
 /// Returns (display name, email) for the signed-in user.
 pub async fn me(access_token: &str) -> Result<(String, String), String> {
-    let response = http_client()?
-        .get(format!("{}/me", GRAPH_BASE))
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft Graph: {}", e))?;
+    let url = format!("{}/me", GRAPH_BASE);
+    let response = send_observed(
+        http_client()?.get(&url).bearer_auth(access_token),
+        "GET",
+        &url,
+        0,
+    )
+    .await?;
     if !response.status().is_success() {
         return Err(error_for(response).await);
     }
@@ -80,8 +104,9 @@ pub async fn upcoming_events(access_token: &str) -> Result<Vec<CalendarEvent>, S
     let start = now - chrono::Duration::hours(8); // catch in-progress meetings
     let end = now + chrono::Duration::hours(24);
 
-    let response = http_client()?
-        .get(format!("{}/me/calendarView", GRAPH_BASE))
+    let url = format!("{}/me/calendarView", GRAPH_BASE);
+    let request = http_client()?
+        .get(&url)
         .query(&[
             ("startDateTime", start.to_rfc3339()),
             ("endDateTime", end.to_rfc3339()),
@@ -93,10 +118,8 @@ pub async fn upcoming_events(access_token: &str) -> Result<Vec<CalendarEvent>, S
             ("$top", "50".to_string()),
         ])
         .header("Prefer", "outlook.timezone=\"UTC\"")
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft Graph: {}", e))?;
+        .bearer_auth(access_token);
+    let response = send_observed(request, "GET", &url, 0).await?;
     if !response.status().is_success() {
         return Err(error_for(response).await);
     }
@@ -158,8 +181,9 @@ pub async fn attendee_emails_between(
     start: chrono::DateTime<chrono::Utc>,
     end: chrono::DateTime<chrono::Utc>,
 ) -> Result<Vec<String>, String> {
-    let response = http_client()?
-        .get(format!("{}/me/calendarView", GRAPH_BASE))
+    let url = format!("{}/me/calendarView", GRAPH_BASE);
+    let request = http_client()?
+        .get(&url)
         .query(&[
             ("startDateTime", start.to_rfc3339()),
             ("endDateTime", end.to_rfc3339()),
@@ -167,10 +191,8 @@ pub async fn attendee_emails_between(
             ("$top", "25".to_string()),
         ])
         .header("Prefer", "outlook.timezone=\"UTC\"")
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft Graph: {}", e))?;
+        .bearer_auth(access_token);
+    let response = send_observed(request, "GET", &url, 0).await?;
     if !response.status().is_success() {
         return Err(error_for(response).await);
     }
@@ -218,13 +240,21 @@ pub async fn create_draft(
         );
     }
 
-    let response = http_client()?
-        .post(format!("{}/me/messages", GRAPH_BASE))
-        .bearer_auth(access_token)
-        .json(&message)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach Microsoft Graph: {}", e))?;
+    let url = format!("{}/me/messages", GRAPH_BASE);
+    let body = serde_json::to_vec(&message)
+        .map_err(|e| format!("Failed to encode the draft message: {}", e))?;
+    let bytes_out = body.len() as u64;
+    let response = send_observed(
+        http_client()?
+            .post(&url)
+            .bearer_auth(access_token)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body),
+        "POST",
+        &url,
+        bytes_out,
+    )
+    .await?;
     if !response.status().is_success() {
         return Err(error_for(response).await);
     }

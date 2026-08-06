@@ -41,10 +41,15 @@ struct OpenRouterResponse {
 #[command]
 pub fn get_openrouter_models() -> Result<Vec<OpenRouterModel>, String> {
     let client = Client::new();
-    let response = client
-        .get("https://openrouter.ai/api/v1/models")
-        .send()
-        .map_err(|e| format!("Failed to make HTTP request: {}", e))?;
+    let outcome = client.get("https://openrouter.ai/api/v1/models").send();
+    crate::network::observe_blocking(
+        crate::network::Purpose::ProviderMetadata,
+        "https://openrouter.ai/api/v1/models",
+        "GET",
+        0,
+        &outcome,
+    );
+    let response = outcome.map_err(|e| format!("Failed to make HTTP request: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP request failed with status: {}", response.status()));

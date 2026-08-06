@@ -489,10 +489,15 @@ impl ModelManager {
             request = request.header("Range", format!("bytes={}-", existing_size));
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to start download: {}", e))?;
+        let outcome = request.send().await;
+        crate::network::observe(
+            crate::network::Purpose::ModelDownload,
+            &model_def.download_url,
+            "GET",
+            0,
+            &outcome,
+        );
+        let response = outcome.map_err(|e| anyhow!("Failed to start download: {}", e))?;
 
         // Check response status - 200 OK (full download) or 206 Partial Content (resume)
         let (total_size, resuming) = if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {

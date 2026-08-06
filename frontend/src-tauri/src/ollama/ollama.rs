@@ -163,11 +163,19 @@ async fn get_models_via_http_async(endpoint: Option<&str>) -> Result<Vec<OllamaM
     let base_url = endpoint.unwrap_or("http://localhost:11434");
     let url = format!("{}/api/tags", base_url);
 
-    let response = client
+    let outcome = client
         .get(&url)
         .timeout(Duration::from_secs(3)) // Per-request timeout
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ProviderMetadata,
+        &url,
+        "GET",
+        0,
+        &outcome,
+    );
+    let response = outcome
         .map_err(|e| {
             if e.is_timeout() {
                 OllamaError::NetworkError("Connection timed out".to_string()).to_string()
@@ -287,12 +295,20 @@ pub async fn pull_ollama_model<R: Runtime>(
         "stream": true
     });
 
-    let response = client
+    let outcome = client
         .post(&url)
         .json(&payload)
         .timeout(Duration::from_secs(600)) // 10 minutes timeout for pulling
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ModelDownload,
+        &url,
+        "POST",
+        0,
+        &outcome,
+    );
+    let response = outcome
         .map_err(|e| {
             if e.is_timeout() {
                 format!("Download timed out. The model may be large, please try using the Ollama CLI: ollama pull {}", model_name)
@@ -447,12 +463,20 @@ pub async fn delete_ollama_model(
 
     log::info!("Deleting Ollama model: {}", model_name);
 
-    let response = client
+    let outcome = client
         .delete(&url)
         .json(&payload)
         .timeout(Duration::from_secs(30))
         .send()
-        .await
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ProviderMetadata,
+        &url,
+        "DELETE",
+        0,
+        &outcome,
+    );
+    let response = outcome
         .map_err(|e| {
             if e.is_timeout() {
                 format!("Delete request timed out for model: {}", model_name)

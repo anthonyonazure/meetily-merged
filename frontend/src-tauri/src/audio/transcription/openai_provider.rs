@@ -112,6 +112,7 @@ impl TranscriptionProvider for OpenAIProvider {
         }
 
         let wav = Self::to_wav_bytes(&audio);
+        let wav_len = wav.len() as u64;
         let audio_part = Part::bytes(wav)
             .file_name("chunk.wav")
             .mime_str("audio/wav")
@@ -125,14 +126,22 @@ impl TranscriptionProvider for OpenAIProvider {
             form = form.text("language", lang);
         }
 
-        let response = self
+        // Network transparency: this request carries recorded audio off the device.
+        let outcome = self
             .client
             .post(OPENAI_TRANSCRIPT_ENDPOINT)
             .bearer_auth(&self.api_key)
             .multipart(form)
             .send()
-            .await
-            .map_err(|e| TranscriptionError::EngineFailed(e.to_string()))?;
+            .await;
+        crate::network::observe(
+            crate::network::Purpose::Transcription,
+            OPENAI_TRANSCRIPT_ENDPOINT,
+            "POST",
+            wav_len,
+            &outcome,
+        );
+        let response = outcome.map_err(|e| TranscriptionError::EngineFailed(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();

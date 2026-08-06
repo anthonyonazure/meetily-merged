@@ -121,12 +121,26 @@ fn http_client() -> Result<reqwest::Client, String> {
 }
 
 async fn post_json(url: &str, payload: &serde_json::Value, target: &str) -> Result<(), String> {
-    let response = http_client()?
+    // Serialised once so the byte count in the network log is exact rather than an
+    // estimate; the header keeps this equivalent to `.json()`.
+    let body = serde_json::to_vec(payload)
+        .map_err(|e| format!("Failed to encode the {} payload: {}", target, e))?;
+    let bytes_out = body.len() as u64;
+    let outcome = http_client()?
         .post(url)
-        .json(payload)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body)
         .send()
-        .await
-        .map_err(|e| format!("Could not reach the {} webhook: {}", target, e))?;
+        .await;
+    crate::network::observe(
+        crate::network::Purpose::ShareWebhook,
+        url,
+        "POST",
+        bytes_out,
+        &outcome,
+    );
+    let response =
+        outcome.map_err(|e| format!("Could not reach the {} webhook: {}", target, e))?;
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();

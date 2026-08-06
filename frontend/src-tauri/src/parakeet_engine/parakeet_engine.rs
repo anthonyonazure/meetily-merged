@@ -746,7 +746,15 @@ impl ParakeetEngine {
                 log::info!("Resuming download from byte {}", existing_size);
             }
 
-            let mut response = request.send().await
+            let outcome = request.send().await;
+            crate::network::observe(
+                crate::network::Purpose::ModelDownload,
+                &file_url,
+                "GET",
+                0,
+                &outcome,
+            );
+            let mut response = outcome
                 .map_err(|e| {
                     anyhow!("Failed to start download for {}: {}", filename, e)
                 })?;
@@ -787,7 +795,15 @@ impl ParakeetEngine {
 
                     // Retry without Range header
                     log::info!("Retrying {} without resume", filename);
-                    response = client.get(&file_url).send().await
+                    let retry = client.get(&file_url).send().await;
+                    crate::network::observe(
+                        crate::network::Purpose::ModelDownload,
+                        &file_url,
+                        "GET",
+                        0,
+                        &retry,
+                    );
+                    response = retry
                         .map_err(|e| anyhow!("Retry failed for {}: {}", filename, e))?;
 
                     if !response.status().is_success() {

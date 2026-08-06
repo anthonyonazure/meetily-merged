@@ -173,11 +173,15 @@ async fn download_file<R: Runtime>(
     info!("[Diarization] Downloading {} from {}", model_label, url);
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Download request failed: {}", e))?;
+    let outcome = client.get(url).send().await;
+    crate::network::observe(
+        crate::network::Purpose::ModelDownload,
+        url,
+        "GET",
+        0,
+        &outcome,
+    );
+    let response = outcome.map_err(|e| format!("Download request failed: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!(
