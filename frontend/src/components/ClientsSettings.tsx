@@ -7,6 +7,7 @@ import { Briefcase, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
 import { Client, ClientWithCounts } from '@/types/clients';
+import { ProfilePicker } from '@/components/Privacy/ProfilePicker';
 
 interface EditorState {
   id: string | null; // null = creating
@@ -99,7 +100,9 @@ export function ClientsSettings() {
       <p className="text-sm text-muted-ink mb-6">
         Meetings tagged with a client build that client&apos;s memory: commitments, decisions,
         and figures collected across meetings. The email domain (like acme.com) lets Meetily
-        suggest the right client from calendar attendees.
+        suggest the right client from calendar attendees. The privacy profile decides where their
+        meetings may be transcribed and summarised, what happens before recording, whether summaries
+        can be shared, and how long they are kept.
       </p>
 
       {isLoading ? (
@@ -119,6 +122,14 @@ export function ClientsSettings() {
                   {client.meeting_count} meeting{client.meeting_count === 1 ? '' : 's'}
                 </div>
               </div>
+              {/* The profile that governs this client's meetings. */}
+              <ProfilePicker
+                clientId={client.id}
+                clientName={client.name}
+                profileId={client.privacy_profile_id}
+                layout="inline"
+                onChange={() => void refresh()}
+              />
               <Button
                 variant="ghost"
                 size="sm"

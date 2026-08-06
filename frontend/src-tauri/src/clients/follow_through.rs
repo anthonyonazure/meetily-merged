@@ -267,6 +267,15 @@ pub async fn run_for_client(
         });
     }
 
+    // Privacy profile: this client's profile decides whether a cloud model may
+    // see their commitments.
+    let effective = crate::profiles::enforce::guard_llm(
+        pool,
+        &crate::profiles::enforce::Scope::client(client_id),
+        model_provider,
+    )
+    .await?;
+
     let settings =
         crate::agents::runner::resolve_llm_settings(pool, model_provider).await?;
     let user_prompt = format!(
@@ -275,6 +284,8 @@ Open commitments that have gone quiet:\n{}",
         client.name,
         commitments_block(&stale)
     );
+
+    let (user_prompt, _) = crate::profiles::enforce::redact_for(&effective, &user_prompt);
 
     let http = reqwest::Client::new();
     let raw = crate::summary::llm_client::generate_summary(

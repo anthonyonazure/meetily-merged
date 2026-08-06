@@ -54,6 +54,27 @@ fn validate_webhook_url(url: &str) -> Result<String, String> {
     Ok(parsed.to_string())
 }
 
+/// Applies the governing privacy profile to a share action: refuses it outright
+/// when the profile has sharing off, and masks obvious secrets in the markdown
+/// otherwise. `meeting_id` is the meeting whose summary is being shared; without
+/// it the workspace default profile applies.
+async fn apply_profile(
+    state: &tauri::State<'_, crate::state::AppState>,
+    meeting_id: Option<&str>,
+    markdown: &str,
+) -> Result<String, String> {
+    let pool = state.db_manager.pool();
+    let scope = match meeting_id {
+        Some(id) if !id.trim().is_empty() => {
+            crate::profiles::enforce::Scope::meeting(id.trim().to_string())
+        }
+        _ => crate::profiles::enforce::Scope::Workspace,
+    };
+    let effective = crate::profiles::enforce::guard_sharing(pool, &scope).await?;
+    let (masked, _) = crate::profiles::enforce::redact_for(&effective, markdown);
+    Ok(masked)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ShareTargets {
     pub slack: bool,
@@ -165,7 +186,13 @@ fn chunk_text(text: &str, max_len: usize) -> Vec<String> {
 /// Posts a summary to the configured Slack incoming webhook. Explicit
 /// per-meeting user action only.
 #[tauri::command]
-pub async fn share_slack(title: String, markdown: String) -> Result<(), String> {
+pub async fn share_slack(
+    state: tauri::State<'_, crate::state::AppState>,
+    title: String,
+    markdown: String,
+    meeting_id: Option<String>,
+) -> Result<(), String> {
+    let markdown = apply_profile(&state, meeting_id.as_deref(), &markdown).await?;
     let url = read_webhook("slack")
         .await?
         .ok_or_else(|| "No Slack webhook configured. Add one in Settings → Integrations.".to_string())?;
@@ -191,7 +218,13 @@ pub async fn share_slack(title: String, markdown: String) -> Result<(), String> 
 /// Posts a summary to the configured Teams incoming webhook as a simple
 /// MessageCard. Explicit per-meeting user action only.
 #[tauri::command]
-pub async fn share_teams(title: String, markdown: String) -> Result<(), String> {
+pub async fn share_teams(
+    state: tauri::State<'_, crate::state::AppState>,
+    title: String,
+    markdown: String,
+    meeting_id: Option<String>,
+) -> Result<(), String> {
+    let markdown = apply_profile(&state, meeting_id.as_deref(), &markdown).await?;
     let url = read_webhook("teams")
         .await?
         .ok_or_else(|| "No Teams webhook configured. Add one in Settings → Integrations.".to_string())?;

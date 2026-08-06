@@ -46,6 +46,18 @@ impl ConsentLevel {
     pub fn requires_pre_record_sheet(self) -> bool {
         matches!(self, Self::Notify | Self::Affirmative)
     }
+
+    /// How much the level asks of the operator, as an orderable rank. Used by
+    /// privacy profiles, where a client's level is a floor the operator may
+    /// raise for one recording but not drop below.
+    pub fn strictness(self) -> u8 {
+        match self {
+            Self::SelfOnly => 0,
+            Self::Notify => 1,
+            Self::Affirmative => 2,
+            Self::PerSpeaker => 3,
+        }
+    }
 }
 
 /// What `per_speaker` does with a speaker who has not been confirmed.
@@ -261,6 +273,13 @@ mod tests {
         assert_eq!(ConsentLevel::parse("nonsense"), ConsentLevel::SelfOnly);
         assert_eq!(EnforcementMode::parse("STRICT"), EnforcementMode::Strict);
         assert_eq!(EnforcementMode::parse(""), EnforcementMode::FlagOnly);
+    }
+
+    #[test]
+    fn levels_rank_from_least_to_most_demanding() {
+        assert!(ConsentLevel::SelfOnly.strictness() < ConsentLevel::Notify.strictness());
+        assert!(ConsentLevel::Notify.strictness() < ConsentLevel::Affirmative.strictness());
+        assert!(ConsentLevel::Affirmative.strictness() < ConsentLevel::PerSpeaker.strictness());
     }
 
     #[test]

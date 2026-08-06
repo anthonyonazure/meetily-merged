@@ -103,20 +103,44 @@ pub fn current_session() -> Option<Clearance> {
     SESSION.lock().ok().and_then(|guard| guard.clone())
 }
 
-/// Resolves the level for a recording: an operator's per-meeting override (from
-/// the clearance) wins over the global default.
+/// Attendees from the clearance the operator just granted, if any. Privacy
+/// profiles use them to work out which client a not-yet-saved recording belongs
+/// to, before there is a meeting row to read a tag from.
+pub fn pending_attendees() -> Vec<String> {
+    read_pending()
+        .map(|clearance| clearance.attendees)
+        .unwrap_or_default()
+}
+
+/// Resolves the level for a recording.
+///
+/// Precedence: the client's privacy profile sets a floor, the operator's
+/// per-meeting choice can raise it but not drop below it, and the global default
+/// applies when no profile resolves. The profile resolver is asked rather than
+/// re-deriving any of this here, so the gate and the pre-record sheet can never
+/// disagree about what this recording needs.
 async fn resolve_for(
     pool: &SqlitePool,
+    title: &str,
     pending: Option<&Clearance>,
 ) -> (ConsentLevel, EnforcementMode, Vec<String>, Vec<String>) {
     let settings = settings::load(pool).await;
-    let level = resolve_level(
+    let attendees = pending
+        .map(|c| c.attendees.clone())
+        .unwrap_or_default();
+    let requested = pending.map(|c| resolve_level(settings.consent_level, Some(c.level.as_str())));
+    let (level, enforcement, _) = crate::profiles::resolver::effective_consent_for_recording(
+        pool,
+        title,
+        &attendees,
         settings.consent_level,
-        pending.map(|c| c.level.as_str()),
-    );
+        settings.per_speaker_enforcement,
+        requested,
+    )
+    .await;
     (
         level,
-        settings.per_speaker_enforcement,
+        enforcement,
         settings.blocked_title_keywords,
         settings.blocked_domains,
     )
@@ -143,7 +167,8 @@ pub async fn enforce<R: Runtime>(
     let now = Utc::now();
 
     let pending = read_pending().filter(|c| c.is_fresh(now) && c.matches_title(&title));
-    let (level, enforcement, keywords, domains) = resolve_for(pool, pending.as_ref()).await;
+    let (level, enforcement, keywords, domains) =
+        resolve_for(pool, &title, pending.as_ref()).await;
     let attendees = pending
         .as_ref()
         .map(|c| c.attendees.clone())

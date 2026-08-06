@@ -8,6 +8,7 @@ import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
 import { ShareSummaryMenu } from './ShareSummaryMenu';
+import { MeetingProfileChip } from '@/components/Privacy/MeetingProfileChip';
 import { ClientChip } from '@/components/Clients/ClientChip';
 import { useEffect, useRef, useState, RefObject } from 'react';
 import { toast } from 'sonner';
@@ -108,6 +109,8 @@ export function SummaryPanel({
   const [summaryLang, setSummaryLang] = useState<string | null>(null);
   const [summaryLangStorage, setSummaryLangStorage] = useState<SummaryLanguageStorage>('metadata');
   const [langPickerOpen, setLangPickerOpen] = useState(false);
+  // Bumped when the client tag changes, so the profile chip re-resolves.
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const languageLoadVersionRef = useRef(0);
   const activeMeetingIdRef = useRef(meeting.id);
   const languageSaveVersionRef = useRef(0);
@@ -263,9 +266,14 @@ export function SummaryPanel({
     <div className="flex-1 min-w-0 flex flex-col bg-surface overflow-hidden">
       {/* Title area */}
       <div className="p-4 border-b border-edge">
-        {/* Client tag: which client this meeting belongs to (Client Memory) */}
-        <div className="flex items-center mb-2">
-          <ClientChip meetingId={meeting.id} />
+        {/* Client tag: which client this meeting belongs to (Client Memory), and
+            the privacy profile that governed this meeting because of it. */}
+        <div className="flex items-center gap-2 mb-2">
+          <ClientChip
+            meetingId={meeting.id}
+            onClientChange={() => setProfileRefreshKey(key => key + 1)}
+          />
+          <MeetingProfileChip meetingId={meeting.id} refreshKey={profileRefreshKey} />
         </div>
         {/* <EditableTitle
           title={meetingTitle}
@@ -321,6 +329,7 @@ export function SummaryPanel({
             {/* Explicit per-meeting share actions (Outlook draft / Slack / Teams) */}
             <div className="flex-shrink-0">
               <ShareSummaryMenu
+                meetingId={meeting.id}
                 meetingTitle={meetingTitle}
                 aiSummary={aiSummary}
                 summaryRef={summaryRef}

@@ -4,6 +4,7 @@ pub mod client;
 pub mod consent;
 pub mod meeting;
 pub mod memory;
+pub mod profile;
 pub mod setting;
 pub mod summary;
 pub mod transcript;

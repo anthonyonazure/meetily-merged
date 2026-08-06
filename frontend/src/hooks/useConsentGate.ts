@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { grantClearance, isConsentError, prepareRecording } from '@/lib/consent';
+import { isProfileBlocked, profileBlockedMessage } from '@/lib/privacy';
 import type { ConsentLevel, ConsentPlan } from '@/types/consent';
 
 interface UseConsentGateReturn {
@@ -83,6 +84,14 @@ export function useConsentGate(): UseConsentGateReturn {
   }, [settle, levelOverride]);
 
   const reportStartError = useCallback((error: unknown): boolean => {
+    // The privacy-profile gate runs just before the consent gate on the start
+    // path, so its refusal has to be reported here too.
+    if (isProfileBlocked(error)) {
+      toast.error('Recording blocked by the privacy profile', {
+        description: profileBlockedMessage(error),
+      });
+      return true;
+    }
     const kind = isConsentError(error);
     if (!kind) return false;
     const message = error instanceof Error ? error.message : String(error);

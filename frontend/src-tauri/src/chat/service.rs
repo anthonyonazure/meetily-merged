@@ -348,6 +348,17 @@ async fn run_chat_llm(
     model_name: &str,
     app_data_dir: Option<PathBuf>,
 ) -> Result<String, String> {
+    // Privacy profile: a meeting or client chat is governed by that meeting's or
+    // client's profile; the all-meetings thread falls back to the workspace
+    // default.
+    let profile_scope = match scope {
+        ChatScope::Meeting(id) => crate::profiles::enforce::Scope::meeting(id.clone()),
+        ChatScope::Client(id) => crate::profiles::enforce::Scope::client(id.clone()),
+        ChatScope::All => crate::profiles::enforce::Scope::Workspace,
+    };
+    let effective =
+        crate::profiles::enforce::guard_llm(pool, &profile_scope, model_provider).await?;
+
     let settings = resolve_llm_settings(pool, model_provider).await?;
 
     // History is read before the new user message was... no: the command
@@ -377,6 +388,8 @@ async fn run_chat_llm(
     };
 
     let user_prompt = build_user_prompt(&context, &history, question);
+    // Mask obvious secrets in the copy handed to the model.
+    let (user_prompt, _) = crate::profiles::enforce::redact_for(&effective, &user_prompt);
 
     let client = reqwest::Client::new();
     let raw = generate_summary(

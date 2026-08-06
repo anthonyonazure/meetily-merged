@@ -10,7 +10,7 @@ impl ClientsRepository {
     /// name.
     pub async fn list_with_counts(pool: &SqlitePool) -> Result<Vec<ClientWithCounts>, sqlx::Error> {
         sqlx::query_as::<_, ClientWithCounts>(
-            "SELECT c.id, c.name, c.domain, c.notes, c.created_at,
+            "SELECT c.id, c.name, c.domain, c.notes, c.created_at, c.privacy_profile_id,
                     (SELECT COUNT(*) FROM meeting_clients mc WHERE mc.client_id = c.id) AS meeting_count,
                     (SELECT COUNT(*) FROM memory_facts f
                      WHERE f.client_id = c.id AND f.kind = 'commitment' AND f.status = 'open') AS open_commitments
@@ -23,7 +23,8 @@ impl ClientsRepository {
 
     pub async fn get(pool: &SqlitePool, client_id: &str) -> Result<Option<Client>, sqlx::Error> {
         sqlx::query_as::<_, Client>(
-            "SELECT id, name, domain, notes, created_at FROM clients WHERE id = ?",
+            "SELECT id, name, domain, notes, created_at, privacy_profile_id
+             FROM clients WHERE id = ?",
         )
         .bind(client_id)
         .fetch_optional(pool)
@@ -42,6 +43,7 @@ impl ClientsRepository {
             domain: domain.map(str::to_string),
             notes: notes.to_string(),
             created_at: Utc::now(),
+            privacy_profile_id: None,
         };
         sqlx::query(
             "INSERT INTO clients (id, name, domain, notes, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -133,7 +135,7 @@ impl MeetingClientsRepository {
         meeting_id: &str,
     ) -> Result<Option<Client>, sqlx::Error> {
         sqlx::query_as::<_, Client>(
-            "SELECT c.id, c.name, c.domain, c.notes, c.created_at
+            "SELECT c.id, c.name, c.domain, c.notes, c.created_at, c.privacy_profile_id
              FROM meeting_clients mc JOIN clients c ON c.id = mc.client_id
              WHERE mc.meeting_id = ? LIMIT 1",
         )

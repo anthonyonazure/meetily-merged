@@ -97,13 +97,38 @@ pub async fn m365_upcoming_events() -> Result<Vec<CalendarEvent>, String> {
 /// user presses send there. Never sends mail itself.
 #[tauri::command]
 pub async fn m365_create_summary_draft(
+    state: tauri::State<'_, crate::state::AppState>,
     subject: String,
     markdown: String,
     recipients: Option<Vec<String>>,
+    meeting_id: Option<String>,
+    client_id: Option<String>,
 ) -> Result<String, String> {
     if markdown.trim().is_empty() {
         return Err("There is no summary content to share".to_string());
     }
+
+    // Privacy profile: refuse the draft when the governing profile has sharing
+    // off, and mask obvious secrets in the body otherwise.
+    let pool = state.db_manager.pool();
+    let non_empty = |value: Option<&str>| {
+        value
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string)
+    };
+    // A meeting draft is governed by that meeting's profile; a client-level draft
+    // (the follow-through chase) by the client's.
+    let scope = match (
+        non_empty(meeting_id.as_deref()),
+        non_empty(client_id.as_deref()),
+    ) {
+        (Some(id), _) => crate::profiles::enforce::Scope::meeting(id),
+        (None, Some(id)) => crate::profiles::enforce::Scope::client(id),
+        (None, None) => crate::profiles::enforce::Scope::Workspace,
+    };
+    let effective = crate::profiles::enforce::guard_sharing(pool, &scope).await?;
+    let (markdown, _) = crate::profiles::enforce::redact_for(&effective, &markdown);
     let recipients = recipients.unwrap_or_default();
     let blocks = crate::export::markdown_ast::parse_markdown(&markdown);
     let body_html = format!(

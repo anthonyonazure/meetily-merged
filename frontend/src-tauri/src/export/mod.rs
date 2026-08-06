@@ -254,12 +254,22 @@ async fn run_export<R: Runtime>(
                 id
             );
         }
+        // The meeting's privacy profile can additionally ask for obvious secrets
+        // to be masked in the exported copy. The stored transcript is untouched.
+        let profile = crate::profiles::resolver::for_meeting(pool, &id).await;
         let transcripts: Vec<(String, String)> = details
             .transcripts
             .iter()
             .zip(redactable.into_iter())
-            .map(|(t, (_, text))| (t.timestamp.clone(), text))
+            .map(|(t, (_, text))| {
+                let (text, _) = crate::profiles::enforce::redact_for(&profile, &text);
+                (t.timestamp.clone(), text)
+            })
             .collect();
+        let summary = summary.map(|markdown| {
+            let (masked, _) = crate::profiles::enforce::redact_for(&profile, &markdown);
+            masked
+        });
 
         // A meeting with neither a transcript nor a summary has nothing to write.
         if transcripts.is_empty() && summary.is_none() {

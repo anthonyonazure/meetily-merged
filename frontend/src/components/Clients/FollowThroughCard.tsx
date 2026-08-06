@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
+import { isProfileBlocked, profileBlockedMessage } from '@/lib/privacy';
 import { Loader2, Mail, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MarkdownLite } from '@/components/shared/MarkdownLite';
@@ -62,8 +63,13 @@ export function FollowThroughCard({ clientId, clientName, openCommitments }: Fol
       setResult(outcome);
     } catch (error) {
       console.error('Follow-through failed:', error);
-      toast.error('Follow-through failed', {
-        description: error instanceof Error ? error.message : String(error),
+      const blocked = isProfileBlocked(error);
+      toast.error(blocked ? 'Blocked by the privacy profile' : 'Follow-through failed', {
+        description: blocked
+          ? profileBlockedMessage(error)
+          : error instanceof Error
+            ? error.message
+            : String(error),
       });
     } finally {
       setRunning(false);
@@ -78,6 +84,10 @@ export function FollowThroughCard({ clientId, clientName, openCommitments }: Fol
           subject: chase.chase_subject,
           markdown: chase.chase_message,
           recipients: null,
+          meetingId: null,
+          // A chase draft is a share of this client's material, so their privacy
+          // profile decides whether it is allowed.
+          clientId,
         });
         await invoke('open_external_url', { url: draftUrl });
         toast.success('Outlook draft created', {
@@ -86,13 +96,17 @@ export function FollowThroughCard({ clientId, clientName, openCommitments }: Fol
       } catch (error) {
         console.error('Failed to create chase draft:', error);
         toast.error('Could not create the Outlook draft', {
-          description: error instanceof Error ? error.message : String(error),
+          description: isProfileBlocked(error)
+            ? profileBlockedMessage(error)
+            : error instanceof Error
+              ? error.message
+              : String(error),
         });
       } finally {
         setDraftingFactId(null);
       }
     },
-    [],
+    [clientId],
   );
 
   return (

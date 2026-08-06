@@ -836,6 +836,17 @@ pub fn run() {
             consent::commands::consent_log_export,
             consent::commands::consent_speak_announcement,
             consent::commands::consent_prefill_attendees,
+            // Per-client privacy profiles
+            profiles::commands::privacy_profiles_list,
+            profiles::commands::privacy_profile_create,
+            profiles::commands::privacy_profile_update,
+            profiles::commands::privacy_profile_delete,
+            profiles::commands::privacy_profile_usage,
+            profiles::commands::privacy_settings_get,
+            profiles::commands::privacy_settings_set_default,
+            profiles::commands::privacy_redaction_preview,
+            profiles::commands::client_set_privacy_profile,
+            profiles::commands::meeting_privacy_profile,
             // Calendar commands (macOS EventKit; clear error elsewhere)
             calendar::calendar_permission_status,
             calendar::calendar_request_access,

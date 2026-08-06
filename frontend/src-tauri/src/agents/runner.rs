@@ -600,8 +600,18 @@ async fn run_agent_llm(
     model_name: &str,
     app_data_dir: Option<PathBuf>,
 ) -> Result<String, String> {
+    // Privacy profile: refuse a cloud model this meeting's profile does not
+    // allow, then mask obvious secrets in the context handed to the model.
+    let effective = crate::profiles::enforce::guard_llm(
+        pool,
+        &crate::profiles::enforce::Scope::meeting(meeting_id),
+        model_provider,
+    )
+    .await?;
+
     let settings = resolve_llm_settings(pool, model_provider).await?;
     let context = build_agent_context(pool, meeting_id, agent).await?;
+    let (context, _) = crate::profiles::enforce::redact_for(&effective, &context);
     let user_prompt = (agent.build_user_prompt)(&context);
 
     let client = reqwest::Client::new();

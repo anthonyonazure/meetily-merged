@@ -44,6 +44,8 @@ export interface ConsentPlan {
   meeting_title: string;
   level: ConsentLevel;
   enforcement: EnforcementMode;
+  /** Name of the privacy profile that set this level, when one applied. */
+  profile_name: string | null;
   requires_sheet: boolean;
   /** Set when a blocking rule matched; recording is refused until overridden. */
   blocked_reason: string | null;

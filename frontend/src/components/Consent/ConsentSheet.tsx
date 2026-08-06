@@ -194,6 +194,14 @@ export function ConsentSheet({ plan, onCleared, onCancel }: ConsentSheetProps) {
             </p>
           )}
 
+          {plan.profile_name && (
+            <p className="text-xs text-muted-ink">
+              This level comes from the{' '}
+              <span className="text-ink">{plan.profile_name}</span> privacy profile. You can ask for
+              more than it sets for this recording, but not less.
+            </p>
+          )}
+
           {blocked && (
             <div className="rounded border border-rec/40 bg-wash p-3">
               <div className="flex items-start gap-2">

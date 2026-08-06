@@ -119,6 +119,7 @@ mod tests {
             domain: domain.map(str::to_string),
             notes: String::new(),
             created_at: Utc::now(),
+            privacy_profile_id: None,
         }
     }
 

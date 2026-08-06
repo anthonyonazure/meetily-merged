@@ -4,6 +4,7 @@ import { ModelConfig } from '@/components/ModelSettingsModal';
 import { CurrentMeeting, useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { invoke as invokeTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
+import { isProfileBlocked, profileBlockedMessage } from '@/lib/privacy';
 import { isOllamaNotInstalledError } from '@/lib/utils';
 import { BuiltInModelInfo } from '@/lib/builtin-ai';
 import { isFailedChunkPlaceholder } from '@/constants/transcriptPlaceholders';
@@ -322,14 +323,26 @@ export function useSummaryGeneration({
       });
     } catch (error) {
       console.error(`Failed to ${isRegeneration ? 'regenerate' : 'generate'} summary:`, error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // A privacy profile that allows on-device models only refuses a cloud
+      // provider here; show its reason rather than the raw error prefix.
+      const blocked = isProfileBlocked(error);
+      const errorMessage = blocked
+        ? profileBlockedMessage(error)
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
       setSummaryError(errorMessage);
       setSummaryStatus('error');
       // Note: We don't clear the summary here because the backend has already restored from backup
 
-      toast.error(`Failed to ${isRegeneration ? 'regenerate' : 'generate'} summary`, {
-        description: errorMessage,
-      });
+      toast.error(
+        blocked
+          ? 'Blocked by the privacy profile'
+          : `Failed to ${isRegeneration ? 'regenerate' : 'generate'} summary`,
+        {
+          description: errorMessage,
+        },
+      );
     }
   }, [
     meeting.id,

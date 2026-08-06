@@ -93,7 +93,17 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
     // this recording must not happen, nothing should be touched on the way to
     // finding that out. Every start path converges here, so no entry point can
     // skip it.
+    // Privacy profile gate. Runs BEFORE consent for the same reason consent runs
+    // before device setup: if the client's profile forbids the configured
+    // transcription provider, nothing should be touched and no consent collected
+    // on the way to finding that out.
+    let profile = crate::profiles::gate::check_recording_start(&app, meeting_name.as_deref()).await?;
+
     crate::consent::gate::enforce(&app, meeting_name.as_deref()).await?;
+
+    // Now that the consent session id exists, record which profile governed this
+    // recording and how it resolved, in the append-only consent log.
+    crate::profiles::gate::log_applied(&app, &profile, meeting_name.as_deref()).await;
 
     // Validate that transcription models are available before starting recording
     info!("🔍 Validating transcription model availability before starting recording...");
@@ -345,7 +355,17 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
 
     // Consent gate. See the note in start_recording_with_meeting_name: this is
     // the enforcement point, the pre-record sheet in the UI is the convenience.
+    // Privacy profile gate. Runs BEFORE consent for the same reason consent runs
+    // before device setup: if the client's profile forbids the configured
+    // transcription provider, nothing should be touched and no consent collected
+    // on the way to finding that out.
+    let profile = crate::profiles::gate::check_recording_start(&app, meeting_name.as_deref()).await?;
+
     crate::consent::gate::enforce(&app, meeting_name.as_deref()).await?;
+
+    // Now that the consent session id exists, record which profile governed this
+    // recording and how it resolved, in the append-only consent log.
+    crate::profiles::gate::log_applied(&app, &profile, meeting_name.as_deref()).await;
 
     // Validate that transcription models are available before starting recording
     info!("🔍 Validating transcription model availability before starting recording...");

@@ -216,6 +216,7 @@ pub async fn meeting_suggest_client(
             domain: c.domain,
             notes: c.notes,
             created_at: c.created_at,
+            privacy_profile_id: c.privacy_profile_id,
         })
         .collect();
     if clients.is_empty() {

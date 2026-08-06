@@ -347,6 +347,20 @@ pub async fn api_process_transcript<R: Runtime>(
     );
 
     let pool = state.db_manager.pool().clone();
+
+    // Privacy profile: refuse a cloud model the meeting's profile does not allow,
+    // and mask obvious secrets in the copy of the transcript that goes to the
+    // model. The stored transcript in `transcripts` is untouched; the masked copy
+    // is what the summary pipeline works from, including the `transcript_chunks`
+    // row, which exists to record what was actually sent to the model.
+    let (text, _profile) = crate::profiles::enforce::guard_llm_and_redact(
+        &pool,
+        &crate::profiles::enforce::Scope::meeting(m_id.clone()),
+        &model,
+        &text,
+    )
+    .await?;
+
     let final_prompt = custom_prompt.unwrap_or_else(|| "".to_string());
     let final_template_id = template_id.unwrap_or_else(|| "standard_meeting".to_string());
 

@@ -7,9 +7,12 @@ import { Loader2, Mail, MessageSquare, Share2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Summary } from '@/types';
+import { isProfileBlocked, meetingPrivacyProfile, profileBlockedMessage } from '@/lib/privacy';
+import type { MeetingProfileView } from '@/types/privacy';
 import { BlockNoteSummaryViewRef } from '@/components/AISummary/BlockNoteSummaryView';
 
 interface ShareSummaryMenuProps {
+  meetingId: string;
   meetingTitle: string;
   aiSummary: Summary | null;
   summaryRef: RefObject<BlockNoteSummaryViewRef>;
@@ -54,11 +57,19 @@ async function summaryMarkdown(
 // Per-meeting share actions. All three are explicit user actions: Outlook
 // creates a DRAFT the user reviews and sends themselves; Slack/Teams post
 // only when the button is pressed.
-export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareSummaryMenuProps) {
+export function ShareSummaryMenu({
+  meetingId,
+  meetingTitle,
+  aiSummary,
+  summaryRef,
+}: ShareSummaryMenuProps) {
   const [open, setOpen] = useState(false);
   const [m365Connected, setM365Connected] = useState(false);
   const [targets, setTargets] = useState<ShareTargets>({ slack: false, teams: false });
   const [busy, setBusy] = useState<ShareAction | null>(null);
+  // The meeting's privacy profile can turn all three actions off. Rust refuses
+  // them regardless; this is so the menu says why before anyone clicks.
+  const [profile, setProfile] = useState<MeetingProfileView | null>(null);
 
   // Refresh availability when the menu opens (cheap local reads).
   useEffect(() => {
@@ -75,8 +86,13 @@ export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareS
       } catch {
         setTargets({ slack: false, teams: false });
       }
+      try {
+        setProfile(await meetingPrivacyProfile(meetingId));
+      } catch {
+        setProfile(null);
+      }
     })();
-  }, [open]);
+  }, [open, meetingId]);
 
   const runShare = async (action: ShareAction) => {
     setBusy(action);
@@ -92,16 +108,18 @@ export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareS
           subject: `Meeting summary: ${title}`,
           markdown,
           recipients: null,
+          meetingId,
+          clientId: null,
         });
         await invoke('open_external_url', { url: draftUrl });
         toast.success('Outlook draft created', {
           description: 'Review the draft and press Send in Outlook.',
         });
       } else if (action === 'slack') {
-        await invoke('share_slack', { title, markdown });
+        await invoke('share_slack', { title, markdown, meetingId });
         toast.success('Summary sent to Slack');
       } else {
-        await invoke('share_teams', { title, markdown });
+        await invoke('share_teams', { title, markdown, meetingId });
         toast.success('Summary sent to Teams');
       }
       setOpen(false);
@@ -111,11 +129,18 @@ export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareS
         slack: 'Could not send to Slack',
         teams: 'Could not send to Teams',
       };
-      toast.error(labels[action], { description: String(error) });
+      toast.error(labels[action], {
+        description: isProfileBlocked(error) ? profileBlockedMessage(error) : String(error),
+      });
     } finally {
       setBusy(null);
     }
   };
+
+  const sharingAllowed = profile?.profile ? profile.profile.allow_sharing : true;
+  const profileHint = profile?.profile
+    ? `The "${profile.profile.name}" profile has sharing turned off for this meeting`
+    : '';
 
   const items: Array<{
     action: ShareAction;
@@ -128,22 +153,22 @@ export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareS
       action: 'outlook',
       label: 'Email via Outlook (draft)',
       icon: Mail,
-      enabled: m365Connected,
-      hint: 'Connect Microsoft 365 in Settings → Integrations',
+      enabled: sharingAllowed && m365Connected,
+      hint: sharingAllowed ? 'Connect Microsoft 365 in Settings → Integrations' : profileHint,
     },
     {
       action: 'slack',
       label: 'Send to Slack',
       icon: MessageSquare,
-      enabled: targets.slack,
-      hint: 'Add a Slack webhook in Settings → Integrations',
+      enabled: sharingAllowed && targets.slack,
+      hint: sharingAllowed ? 'Add a Slack webhook in Settings → Integrations' : profileHint,
     },
     {
       action: 'teams',
       label: 'Send to Teams',
       icon: Users,
-      enabled: targets.teams,
-      hint: 'Add a Teams webhook in Settings → Integrations',
+      enabled: sharingAllowed && targets.teams,
+      hint: sharingAllowed ? 'Add a Teams webhook in Settings → Integrations' : profileHint,
     },
   ];
 
@@ -177,7 +202,9 @@ export function ShareSummaryMenu({ meetingTitle, aiSummary, summaryRef }: ShareS
           </button>
         ))}
         <p className="px-3 py-1.5 text-[11px] text-faint border-t border-edge mt-1">
-          Sharing only happens when you click an action here.
+          {sharingAllowed
+            ? 'Sharing only happens when you click an action here.'
+            : profileHint + '. Copy and export still work.'}
         </p>
       </PopoverContent>
     </Popover>

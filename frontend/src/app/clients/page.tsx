@@ -25,6 +25,7 @@ import {
 } from '@/types/clients';
 import { FollowThroughCard } from '@/components/Clients/FollowThroughCard';
 import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
+import { ProfilePicker } from '@/components/Privacy/ProfilePicker';
 const KIND_META: Record<string, { label: string; icon: typeof ListTodo }> = {
   commitment: { label: 'Commitment', icon: ListTodo },
   decision: { label: 'Decision', icon: Gavel },
@@ -300,6 +301,16 @@ export default function ClientsPage() {
                 ? ` · ${selectedClient.open_commitments} open commitment${selectedClient.open_commitments === 1 ? '' : 's'}`
                 : ''}
             </p>
+
+            {/* Which privacy profile governs this client's meetings. */}
+            <div className="bg-surface border border-edge rounded-lg p-4 mb-6">
+              <ProfilePicker
+                clientId={selectedClient.id}
+                clientName={selectedClient.name}
+                profileId={selectedClient.privacy_profile_id}
+                onChange={() => void refreshClients()}
+              />
+            </div>
 
             <FollowThroughCard
               clientId={selectedClient.id}

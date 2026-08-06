@@ -7,6 +7,8 @@ export interface Client {
   domain: string | null;
   notes: string;
   created_at: string;
+  /** Privacy profile governing this client's meetings; null = workspace default. */
+  privacy_profile_id: string | null;
 }
 
 export interface ClientWithCounts extends Client {

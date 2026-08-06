@@ -162,7 +162,9 @@ pub struct ChatMessageRecord {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// One client in the Client Memory registry.
+/// One client in the Client Memory registry. `privacy_profile_id` is the
+/// profile that governs this client's meetings; None falls back to the
+/// workspace default.
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct Client {
     pub id: String,
@@ -170,6 +172,7 @@ pub struct Client {
     pub domain: Option<String>,
     pub notes: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub privacy_profile_id: Option<String>,
 }
 
 /// Client joined with aggregate counts, for the Clients list view.
@@ -180,8 +183,39 @@ pub struct ClientWithCounts {
     pub domain: Option<String>,
     pub notes: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub privacy_profile_id: Option<String>,
     pub meeting_count: i64,
     pub open_commitments: i64,
+}
+
+/// One `privacy_profiles` row, exactly as stored. `profiles::rules` parses the
+/// mode/level strings into typed enums.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct PrivacyProfileRow {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub transcription_mode: String,
+    pub llm_mode: String,
+    pub consent_level: String,
+    pub consent_enforcement: String,
+    pub retention_days: Option<i64>,
+    pub redact_pii: bool,
+    pub allow_sharing: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub is_builtin: bool,
+}
+
+/// The single `privacy_settings` row: the workspace default profile plus the
+/// retention switches. `retention_armed_at` is set only when the operator turns
+/// dry run off, and the background purge requires it.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct PrivacySettingsRow {
+    pub default_profile_id: Option<String>,
+    pub retention_dry_run: bool,
+    pub retention_armed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub retention_last_run_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// One structured Client Memory fact extracted from a meeting.

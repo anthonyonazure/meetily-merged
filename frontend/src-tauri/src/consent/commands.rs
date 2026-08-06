@@ -130,6 +130,9 @@ pub struct ConsentPlan {
     pub meeting_title: String,
     pub level: ConsentLevel,
     pub enforcement: EnforcementMode,
+    /// Name of the privacy profile that set this level, when one applied. Lets
+    /// the sheet say why it is asking for more than the global default does.
+    pub profile_name: Option<String>,
     /// True when the operator must act before recording can start.
     pub requires_sheet: bool,
     /// Present when a blocking rule matched; recording is refused until the
@@ -158,7 +161,7 @@ pub async fn consent_prepare_recording(
     let pool = state.db_manager.pool();
     let loaded = settings::load(pool).await;
     let title = bounded(&meeting_title);
-    let level = rules::resolve_level(loaded.consent_level, level_override.as_deref());
+    let requested = rules::resolve_level(loaded.consent_level, level_override.as_deref());
 
     let mut attendee_list: Vec<String> = attendees
         .unwrap_or_default()
@@ -166,6 +169,21 @@ pub async fn consent_prepare_recording(
         .map(|a| bounded(&a))
         .filter(|a| !a.is_empty())
         .collect();
+
+    // The client's privacy profile sets a floor the operator can raise but not
+    // drop below; with no profile in force the global default applies. Resolved
+    // through the same function the gate uses, so the sheet the operator sees
+    // and the gate that runs at start agree.
+    let (level, enforcement, effective_profile) =
+        crate::profiles::resolver::effective_consent_for_recording(
+            pool,
+            &title,
+            &attendee_list,
+            loaded.consent_level,
+            loaded.per_speaker_enforcement,
+            Some(requested),
+        )
+        .await;
 
     // Only the affirmative checklist needs a prefilled roster, and only when
     // the caller did not already supply one.
@@ -202,7 +220,8 @@ pub async fn consent_prepare_recording(
         session_id,
         meeting_title: title,
         level,
-        enforcement: loaded.per_speaker_enforcement,
+        enforcement,
+        profile_name: effective_profile.profile_name().map(str::to_string),
         requires_sheet: level.requires_pre_record_sheet() || block.is_some(),
         blocked_reason: block.map(|r| r.describe()),
         disclaimer_text: loaded.disclaimer_text,
