@@ -224,6 +224,34 @@ pub struct MemoryFactWithMeeting {
     pub meeting_created_at: DateTimeUtc,
 }
 
+/// The single recording-consent settings row. Keyword and domain lists are
+/// stored comma-separated; `consent/rules.rs` splits and rejoins them.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ConsentSettingsRow {
+    pub consent_level: String,
+    pub per_speaker_enforcement: String,
+    pub spoken_announcement_enabled: bool,
+    pub announcement_text: String,
+    pub disclaimer_text: String,
+    pub blocked_title_keywords: String,
+    pub blocked_domains: String,
+}
+
+/// One row of the append-only consent log. `meeting_id` is either a
+/// `meetings.id` or a pre-recording consent session id (bridged through
+/// `consent_session_meetings`).
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ConsentEvent {
+    pub id: String,
+    pub meeting_id: String,
+    pub level: String,
+    pub event_type: String,
+    pub subject: Option<String>,
+    pub method: Option<String>,
+    pub detail: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AgentSettingRow {
     pub agent_id: String,

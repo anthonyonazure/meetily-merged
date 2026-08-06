@@ -111,19 +111,14 @@ async fn build_single_meeting_context(
         return Err("This meeting has no transcript yet".to_string());
     }
 
-    let transcript = transcripts
+    // Strict per-speaker consent withholds unconsented speakers' text from the
+    // chat grounding context, so an unconsented voice cannot be quoted back.
+    let rows: Vec<(Option<String>, String)> = transcripts
         .iter()
-        .map(|t| {
-            let speaker = t
-                .speaker
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .map(|s| format!("[{}] ", s))
-                .unwrap_or_default();
-            format!("{}{}", speaker, t.transcript)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|t| (t.speaker.clone(), t.transcript.clone()))
+        .collect();
+    let transcript =
+        crate::consent::filter::speaker_prefixed_block(pool, meeting_id, &rows).await;
 
     let summary = match SummaryProcessesRepository::get_summary_data(pool, meeting_id).await {
         Ok(Some(process)) => summary_markdown_from_result(process.result.as_deref()),

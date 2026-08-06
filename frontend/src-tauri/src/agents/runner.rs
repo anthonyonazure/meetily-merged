@@ -130,19 +130,14 @@ async fn build_agent_context(
         return Err("This meeting has no transcript yet".to_string());
     }
 
-    let transcript = transcripts
+    // Strict per-speaker consent withholds unconsented speakers' text from the
+    // agent's context, so agent output cannot be derived from it.
+    let rows: Vec<(Option<String>, String)> = transcripts
         .iter()
-        .map(|t| {
-            let speaker = t
-                .speaker
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .map(|s| format!("[{}] ", s))
-                .unwrap_or_default();
-            format!("{}{}", speaker, t.transcript)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|t| (t.speaker.clone(), t.transcript.clone()))
+        .collect();
+    let transcript =
+        crate::consent::filter::speaker_prefixed_block(pool, meeting_id, &rows).await;
 
     let summary_markdown = match SummaryProcessesRepository::get_summary_data(pool, meeting_id).await
     {

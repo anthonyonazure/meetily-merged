@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod chat;
 pub mod client;
+pub mod consent;
 pub mod meeting;
 pub mod memory;
 pub mod setting;

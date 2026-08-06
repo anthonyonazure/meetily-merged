@@ -89,6 +89,12 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
         return Err("Recording already in progress".to_string());
     }
 
+    // Consent gate. Deliberately before device setup and model validation: if
+    // this recording must not happen, nothing should be touched on the way to
+    // finding that out. Every start path converges here, so no entry point can
+    // skip it.
+    crate::consent::gate::enforce(&app, meeting_name.as_deref()).await?;
+
     // Validate that transcription models are available before starting recording
     info!("🔍 Validating transcription model availability before starting recording...");
     if let Err(validation_error) = transcription::validate_transcription_model_ready(&app).await {
@@ -336,6 +342,10 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
     if current_recording_state {
         return Err("Recording already in progress".to_string());
     }
+
+    // Consent gate. See the note in start_recording_with_meeting_name: this is
+    // the enforcement point, the pre-record sheet in the UI is the convenience.
+    crate::consent::gate::enforce(&app, meeting_name.as_deref()).await?;
 
     // Validate that transcription models are available before starting recording
     info!("🔍 Validating transcription model availability before starting recording...");

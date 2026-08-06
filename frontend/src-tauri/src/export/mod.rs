@@ -237,10 +237,28 @@ async fn run_export<R: Runtime>(
             .flatten()
             .and_then(|p| summary_markdown(p.result.as_deref()));
 
+        // Strict per-speaker consent withholds unconsented speakers' text from
+        // exported files. The stored transcript is untouched: a later
+        // confirmation makes a re-export complete without re-transcribing.
+        let redaction = crate::consent::filter::state_for_meeting(pool, &id).await;
+        let mut redactable: Vec<(Option<String>, String)> = details
+            .transcripts
+            .iter()
+            .map(|t| (t.speaker.clone(), t.text.clone()))
+            .collect();
+        let withheld = crate::consent::filter::redact_segments(&redaction, &mut redactable);
+        if withheld > 0 {
+            log::info!(
+                "[Consent] export withheld {} segment(s) from meeting {}",
+                withheld,
+                id
+            );
+        }
         let transcripts: Vec<(String, String)> = details
             .transcripts
             .iter()
-            .map(|t| (t.timestamp.clone(), t.text.clone()))
+            .zip(redactable.into_iter())
+            .map(|(t, (_, text))| (t.timestamp.clone(), text))
             .collect();
 
         // A meeting with neither a transcript nor a summary has nothing to write.

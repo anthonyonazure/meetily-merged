@@ -161,6 +161,7 @@ pub mod calendar;
 pub mod chat;
 pub mod clients;
 pub mod config;
+pub mod consent;
 pub mod console_utils;
 pub mod database;
 pub mod detection;
@@ -819,6 +820,21 @@ pub fn run() {
             chat::commands::chat_send,
             chat::commands::chat_history,
             chat::commands::chat_clear,
+
+            // Recording consent
+            consent::commands::consent_get_settings,
+            consent::commands::consent_save_settings,
+            consent::commands::consent_prepare_recording,
+            consent::commands::consent_grant_clearance,
+            consent::commands::consent_active_session,
+            consent::commands::consent_bind_meeting,
+            consent::commands::consent_record_event,
+            consent::commands::consent_log_for_meeting,
+            consent::commands::consent_speakers_for_meeting,
+            consent::commands::consent_redaction_state,
+            consent::commands::consent_log_export,
+            consent::commands::consent_speak_announcement,
+            consent::commands::consent_prefill_attendees,
             // Calendar commands (macOS EventKit; clear error elsewhere)
             calendar::calendar_permission_status,
             calendar::calendar_request_access,
