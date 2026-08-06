@@ -138,7 +138,8 @@ fn build_markdown(
 /// Opens a file or folder with the platform's default handler (Finder /
 /// Explorer / browser). Used after an HTML-print export so the user lands one
 /// keystroke away from "Save as PDF". Failures are logged, never fatal.
-fn open_with_default_app(path: &Path) {
+/// `pub(crate)`: the branding preview opens its sample the same way.
+pub(crate) fn open_path_with_default_app(path: &Path) {
     let path_str = path.to_string_lossy().to_string();
     let result = if cfg!(target_os = "windows") {
         std::process::Command::new("explorer").arg(&path_str).spawn()
@@ -213,6 +214,10 @@ async fn run_export<R: Runtime>(
             .collect(),
     };
 
+    // The firm's letterhead, footer, and accent, or None when unconfigured.
+    // Markdown stays unbranded: it is a data format, not a deliverable.
+    let branding = crate::branding::for_export(pool).await;
+
     let mut exported = 0usize;
     let mut skipped = 0usize;
     let mut written_paths: Vec<std::path::PathBuf> = Vec::new();
@@ -257,13 +262,17 @@ async fn run_export<R: Runtime>(
         // The meeting's privacy profile can additionally ask for obvious secrets
         // to be masked in the exported copy. The stored transcript is untouched.
         let profile = crate::profiles::resolver::for_meeting(pool, &id).await;
+        // Output polish: fillers dropped, stutters collapsed, spoken numbers and
+        // times normalized in the exported copy only. `transcripts` in SQLite is
+        // untouched, so re-exporting after a polish change re-derives from the
+        // original words rather than from an already-cleaned copy.
         let transcripts: Vec<(String, String)> = details
             .transcripts
             .iter()
             .zip(redactable.into_iter())
             .map(|(t, (_, text))| {
                 let (text, _) = crate::profiles::enforce::redact_for(&profile, &text);
-                (t.timestamp.clone(), text)
+                (t.timestamp.clone(), crate::polish::polish_transcript(&text))
             })
             .collect();
         let summary = summary.map(|markdown| {
@@ -306,6 +315,7 @@ async fn run_export<R: Runtime>(
                 &details.created_at,
                 summary.as_deref(),
                 &transcripts,
+                branding.as_ref(),
             ),
             ExportFormat::HtmlPrint => {
                 let html = html::build_meeting_html(
@@ -313,6 +323,7 @@ async fn run_export<R: Runtime>(
                     &details.created_at,
                     summary.as_deref(),
                     &transcripts,
+                    branding.as_ref(),
                 );
                 std::fs::write(&path, html).map_err(|e| e.to_string())
             }
@@ -334,9 +345,9 @@ async fn run_export<R: Runtime>(
     // single exported page directly, or the folder when there are several.
     if format == ExportFormat::HtmlPrint && exported > 0 {
         if exported == 1 {
-            open_with_default_app(&written_paths[0]);
+            open_path_with_default_app(&written_paths[0]);
         } else {
-            open_with_default_app(&folder);
+            open_path_with_default_app(&folder);
         }
     }
 
