@@ -165,6 +165,37 @@ impl MemoryFactsRepository {
         }
     }
 
+    /// Facts by id, joined with their meeting. Used to turn semantic search hits
+    /// (which know only ids) back into the full rows the UI renders. The order of
+    /// `ids` is preserved, because for a ranked search that order is the result.
+    pub async fn by_ids(
+        pool: &SqlitePool,
+        ids: &[String],
+    ) -> Result<Vec<MemoryFactWithMeeting>, sqlx::Error> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        let sql = format!(
+            "SELECT f.id, f.meeting_id, f.client_id, f.agent_run_id, f.kind, f.subject, f.detail,
+                    f.owner, f.due_hint, f.amount, f.status, f.created_at, f.updated_at,
+                    m.title AS meeting_title, m.created_at AS meeting_created_at
+             FROM memory_facts f
+             JOIN meetings m ON m.id = f.meeting_id
+             WHERE f.id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query_as::<_, MemoryFactWithMeeting>(&sql);
+        for id in ids {
+            query = query.bind(id);
+        }
+        let rows = query.fetch_all(pool).await?;
+        Ok(ids
+            .iter()
+            .filter_map(|id| rows.iter().find(|row| &row.id == id).cloned())
+            .collect())
+    }
+
     /// Open commitments for one client created more than `min_age_days` days
     /// ago (0 = all open commitments), newest meeting first.
     pub async fn open_commitments_for_client(

@@ -608,6 +608,13 @@ impl SummaryService {
                         app_data_dir.clone(),
                     )
                     .await;
+
+                    // Semantic search: index this meeting's transcript, summary, and
+                    // memory facts now that all three exist. Runs last and never
+                    // affects the summary result — search bookkeeping must not be
+                    // able to fail a summary the user is waiting for. No-op unless
+                    // the operator turned semantic search on.
+                    crate::embeddings::index::index_after_summary(&pool, &meeting_id).await;
                 }
             }
             Err(e) => {

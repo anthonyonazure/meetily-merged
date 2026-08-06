@@ -27,6 +27,7 @@ import { FollowThroughCard } from '@/components/Clients/FollowThroughCard';
 import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
 import { ProfilePicker } from '@/components/Privacy/ProfilePicker';
 import { ClientRateCard } from '@/components/Billing/ClientRateCard';
+import { ClientSearchPanel } from '@/components/Search/ClientSearchPanel';
 const KIND_META: Record<string, { label: string; icon: typeof ListTodo }> = {
   commitment: { label: 'Commitment', icon: ListTodo },
   decision: { label: 'Decision', icon: Gavel },
@@ -319,6 +320,11 @@ export default function ClientsPage() {
                 />
               </div>
             </div>
+
+            <ClientSearchPanel
+              clientId={selectedClient.id}
+              clientName={selectedClient.name}
+            />
 
             <FollowThroughCard
               clientId={selectedClient.id}

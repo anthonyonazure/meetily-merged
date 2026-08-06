@@ -37,6 +37,54 @@ const CLIENT_MEETINGS_LIMIT: usize = 15;
 /// How many prior chat turns are replayed into the prompt for continuity.
 const HISTORY_TURNS: usize = 12;
 
+/// Above this many characters of grounding context, retrieval replaces the dump.
+///
+/// Below it, handing the model everything is both cheaper and better: there is no
+/// haystack to search. Above it the prompt starts crowding out the question, and a
+/// semantic pass that keeps the twelve most relevant passages beats twenty
+/// truncated summaries. The threshold is a size, not a meeting count, because one
+/// long meeting can outweigh ten short ones.
+const RETRIEVAL_THRESHOLD_CHARS: usize = 24_000;
+
+/// How many passages retrieval contributes when it takes over.
+const RETRIEVAL_TOP_K: i64 = 14;
+
+/// Replaces a large grounding context with the passages most relevant to the
+/// question, when retrieval is available and the context is genuinely large.
+///
+/// Returns the original context unchanged whenever semantic search is off, not yet
+/// indexed, or finds nothing — so this can only ever improve on the dump, never
+/// leave the model with less to work from than before.
+async fn narrow_context_if_large(
+    pool: &SqlitePool,
+    context: String,
+    question: &str,
+    scope: crate::embeddings::search::SearchScope,
+) -> String {
+    if context.chars().count() <= RETRIEVAL_THRESHOLD_CHARS {
+        return context;
+    }
+    match crate::embeddings::search::retrieve_context(pool, question, &scope, RETRIEVAL_TOP_K).await
+    {
+        Ok(passages) if !passages.is_empty() => {
+            info!(
+                "Chat context narrowed by retrieval: {} chars dumped -> {} relevant passage(s)",
+                context.chars().count(),
+                passages.len()
+            );
+            format!(
+                "The most relevant passages from the recorded meetings, found by searching for this question. This is a selection, not everything on record.\n\n{}",
+                passages.join("\n\n")
+            )
+        }
+        Ok(_) => context,
+        Err(e) => {
+            log::warn!("Chat retrieval failed, keeping the full context: {}", e);
+            context
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatResponsePayload {
     /// Meeting scope the response belongs to, when any.
@@ -87,7 +135,10 @@ fn truncate_transcript(transcript: &str) -> String {
 }
 
 /// Extracts the summary markdown from a stored summary process row.
-fn summary_markdown_from_result(raw: Option<&str>) -> Option<String> {
+///
+/// `pub(crate)` because the semantic indexer needs exactly the same extraction, and
+/// two copies of "where the markdown lives inside that JSON" would drift.
+pub(crate) fn summary_markdown_from_result(raw: Option<&str>) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(raw?).ok()?;
     let markdown = value.get("markdown")?.as_str()?.trim();
     (!markdown.is_empty()).then(|| markdown.to_string())
@@ -375,16 +426,47 @@ async fn run_chat_llm(
         history.pop();
     }
 
+    // All three scopes build their context the same way as before, then hand it to
+    // retrieval. Retrieval only takes over when the context is large enough that
+    // dumping it is the worse option, so a single short meeting is unaffected.
     let (system_prompt, context) = match scope {
-        ChatScope::Meeting(id) => (
-            SYSTEM_PROMPT_SINGLE,
-            build_single_meeting_context(pool, id).await?,
-        ),
-        ChatScope::Client(id) => (
-            SYSTEM_PROMPT_CLIENT,
-            build_client_context(pool, id).await?,
-        ),
-        ChatScope::All => (SYSTEM_PROMPT_ALL, build_all_meetings_context(pool).await?),
+        ChatScope::Meeting(id) => {
+            let context = build_single_meeting_context(pool, id).await?;
+            let scope = crate::embeddings::search::SearchScope {
+                meeting_id: Some(id.clone()),
+                client_id: None,
+                since: None,
+            };
+            (
+                SYSTEM_PROMPT_SINGLE,
+                narrow_context_if_large(pool, context, question, scope).await,
+            )
+        }
+        ChatScope::Client(id) => {
+            let context = build_client_context(pool, id).await?;
+            let scope = crate::embeddings::search::SearchScope {
+                meeting_id: None,
+                client_id: Some(id.clone()),
+                since: None,
+            };
+            (
+                SYSTEM_PROMPT_CLIENT,
+                narrow_context_if_large(pool, context, question, scope).await,
+            )
+        }
+        ChatScope::All => {
+            let context = build_all_meetings_context(pool).await?;
+            (
+                SYSTEM_PROMPT_ALL,
+                narrow_context_if_large(
+                    pool,
+                    context,
+                    question,
+                    crate::embeddings::search::SearchScope::default(),
+                )
+                .await,
+            )
+        }
     };
 
     let user_prompt = build_user_prompt(&context, &history, question);

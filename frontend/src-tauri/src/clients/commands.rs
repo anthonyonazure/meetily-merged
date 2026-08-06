@@ -361,8 +361,12 @@ pub async fn memory_fact_delete(
         .map_err(|e| format!("Failed to delete memory fact: {}", e))
 }
 
-/// Case-insensitive substring search over fact subjects and details, optionally
-/// scoped to one client.
+/// Searches client memory. Word matches first, then facts that mean the same thing
+/// as the query even when they share no words with it.
+///
+/// The semantic half only adds results, never removes or reorders the word matches:
+/// an operator who typed an exact phrase should still see it at the top. When
+/// semantic search is off or unindexed this behaves exactly as it did before.
 #[tauri::command]
 pub async fn memory_search(
     state: tauri::State<'_, AppState>,
@@ -373,12 +377,42 @@ pub async fn memory_search(
     if query.is_empty() {
         return Ok(Vec::new());
     }
-    MemoryFactsRepository::search(
-        state.db_manager.pool(),
+    let pool = state.db_manager.pool();
+    let mut facts = MemoryFactsRepository::search(
+        pool,
         query,
         client_id.as_deref(),
         MEMORY_SEARCH_LIMIT,
     )
     .await
-    .map_err(|e| format!("Failed to search memory: {}", e))
+    .map_err(|e| format!("Failed to search memory: {}", e))?;
+
+    let scope = crate::embeddings::search::SearchScope {
+        meeting_id: None,
+        client_id: client_id.clone(),
+        since: None,
+    };
+    match crate::embeddings::search::hybrid(pool, query, &scope, Some(MEMORY_SEARCH_LIMIT)).await {
+        Ok(results) if results.semantic_used => {
+            let extra_ids: Vec<String> = results
+                .hits
+                .iter()
+                .filter(|hit| {
+                    hit.source_kind == crate::embeddings::store::KIND_MEMORY_FACT
+                        && hit.semantic_score.is_some()
+                        && !facts.iter().any(|fact| fact.id == hit.source_id)
+                })
+                .map(|hit| hit.source_id.clone())
+                .collect();
+            match MemoryFactsRepository::by_ids(pool, &extra_ids).await {
+                Ok(extra) => facts.extend(extra),
+                Err(e) => log_warn!("Semantic memory hits could not be loaded: {}", e),
+            }
+        }
+        Ok(_) => {}
+        Err(e) => log_warn!("Semantic memory search failed, word matches only: {}", e),
+    }
+
+    facts.truncate(MEMORY_SEARCH_LIMIT as usize);
+    Ok(facts)
 }

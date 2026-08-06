@@ -168,6 +168,7 @@ pub mod console_utils;
 pub mod database;
 pub mod detection;
 pub mod dictation;
+pub mod embeddings;
 pub mod m365;
 pub mod meeting_type;
 pub mod notifications;
@@ -626,6 +627,10 @@ pub fn run() {
             //     });
             // }
 
+            // Set the semantic-search model directory (models download lazily, only
+            // once an operator turns the feature on)
+            embeddings::model::set_models_directory(&_app.handle());
+
             // Initialize database (handles first launch detection and conditional setup)
             tauri::async_runtime::block_on(async {
                 database::setup::initialize_database_on_startup(&_app.handle()).await
@@ -830,6 +835,13 @@ pub fn run() {
             chat::commands::chat_send,
             chat::commands::chat_history,
             chat::commands::chat_clear,
+
+            // Local semantic search (on-device embeddings)
+            embeddings::commands::search_semantic,
+            embeddings::commands::embeddings_index_status,
+            embeddings::commands::embeddings_reindex,
+            embeddings::commands::embeddings_settings_get,
+            embeddings::commands::embeddings_settings_set,
 
             // Recording consent
             consent::commands::consent_get_settings,

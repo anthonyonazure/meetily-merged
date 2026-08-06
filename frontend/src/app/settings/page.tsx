@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock, Receipt, FileText } from 'lucide-react';
+import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock, Receipt, FileText, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
@@ -17,6 +17,7 @@ import { PrivacyProfilesPanel } from '@/components/Privacy/PrivacyProfilesPanel'
 import { BillingSettingsPanel } from '@/components/Billing/BillingSettingsPanel';
 import { DeliverablesPanel } from '@/components/Branding/DeliverablesPanel';
 import { TemplateMappingPanel } from '@/components/MeetingType/TemplateMappingPanel';
+import { SemanticSearchSettings } from '@/components/Search/SemanticSearchSettings';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -30,6 +31,7 @@ const TABS = [
   { value: 'clients', label: 'Clients', icon: Briefcase },
   { value: 'billing', label: 'Billing', icon: Receipt },
   { value: 'deliverables', label: 'Deliverables', icon: FileText },
+  { value: 'search', label: 'Search', icon: Search },
   { value: 'consent', label: 'Consent', icon: ShieldCheck },
   { value: 'privacy', label: 'Privacy profiles', icon: Lock },
   { value: 'beta', label: 'Beta', icon: FlaskConical }
@@ -152,6 +154,9 @@ export default function SettingsPage() {
             </TabsContent>
             <TabsContent value="deliverables">
               <DeliverablesPanel />
+            </TabsContent>
+            <TabsContent value="search">
+              <SemanticSearchSettings />
             </TabsContent>
             <TabsContent value="consent">
               <ConsentSettingsPanel />
