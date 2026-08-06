@@ -92,11 +92,38 @@ impl ConsentSettings {
     }
 }
 
+/// Applies a managed configuration on top of the stored row.
+///
+/// This is the single place a fleet policy meets consent, which is why it lives on
+/// the read path rather than being written into the row at startup: the operator's
+/// own choice stays intact in the database, and a policy that is later withdrawn
+/// simply stops applying instead of leaving its values behind.
+fn apply_managed(settings: &mut ConsentSettings) {
+    let managed = crate::fleet::managed();
+    if managed.is_empty() {
+        return;
+    }
+    settings.consent_level =
+        crate::fleet::overlay::effective_consent_level(&managed, settings.consent_level);
+    settings.per_speaker_enforcement =
+        crate::fleet::overlay::effective_enforcement(&managed, settings.per_speaker_enforcement);
+    settings.blocked_title_keywords = crate::fleet::overlay::merged_list(
+        managed.blocked_title_keywords.as_ref(),
+        &settings.blocked_title_keywords,
+        managed.is_locked("blocked_title_keywords"),
+    );
+    settings.blocked_domains = crate::fleet::overlay::merged_list(
+        managed.blocked_domains.as_ref(),
+        &settings.blocked_domains,
+        managed.is_locked("blocked_domains"),
+    );
+}
+
 /// Loads the settings row, substituting defaults when it is missing or the read
 /// fails. Never returns an error: the gate calls this on the recording start
 /// path and must always reach a decision.
 pub async fn load(pool: &SqlitePool) -> ConsentSettings {
-    match ConsentSettingsRepository::get(pool).await {
+    let mut settings = match ConsentSettingsRepository::get(pool).await {
         Ok(Some(row)) => ConsentSettings::from_row(row),
         Ok(None) => {
             log::warn!("[Consent] settings row missing; using defaults");
@@ -106,10 +133,44 @@ pub async fn load(pool: &SqlitePool) -> ConsentSettings {
             log::warn!("[Consent] failed to read settings ({}); using defaults", e);
             ConsentSettings::default()
         }
+    };
+    apply_managed(&mut settings);
+    settings
+}
+
+/// Loads exactly what is stored, with no managed policy applied.
+///
+/// The settings panel needs both: `load` to show what is in force, and this to show
+/// what the operator themselves chose underneath a policy.
+pub async fn load_local(pool: &SqlitePool) -> ConsentSettings {
+    match ConsentSettingsRepository::get(pool).await {
+        Ok(Some(row)) => ConsentSettings::from_row(row),
+        _ => ConsentSettings::default(),
     }
 }
 
 pub async fn save(pool: &SqlitePool, settings: &ConsentSettings) -> Result<(), String> {
+    // A locked key must not be storable at a looser value than the policy sets,
+    // even if a request reaches this function with one — the UI disables the
+    // control, but the command surface must not depend on the UI to be safe.
+    let mut settings = settings.clone();
+    let managed = crate::fleet::managed();
+    if !managed.is_empty() {
+        let mut clamped = settings.clone();
+        apply_managed(&mut clamped);
+        if managed.is_locked("consent_level_floor") || managed.consent_level_floor.is_some() {
+            settings.consent_level = clamped.consent_level;
+        }
+        if managed.is_locked("consent_enforcement") || managed.consent_enforcement.is_some() {
+            settings.per_speaker_enforcement = clamped.per_speaker_enforcement;
+        }
+        if managed.blocked_title_keywords.is_some() {
+            settings.blocked_title_keywords = clamped.blocked_title_keywords;
+        }
+        if managed.blocked_domains.is_some() {
+            settings.blocked_domains = clamped.blocked_domains;
+        }
+    }
     ConsentSettingsRepository::save(pool, &settings.to_row())
         .await
         .map_err(|e| format!("Failed to save consent settings: {}", e))

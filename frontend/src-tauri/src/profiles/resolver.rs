@@ -147,8 +147,40 @@ impl EffectiveProfile {
     }
 }
 
+/// The workspace default a managed configuration names, resolved by id or by name.
+///
+/// Resolved on every call rather than written into `privacy_settings` at startup, so
+/// the operator's own default is still there underneath and a withdrawn policy
+/// simply stops applying.
+async fn managed_workspace_default(pool: &SqlitePool) -> Option<EffectiveProfile> {
+    let wanted = crate::fleet::default_privacy_profile()?;
+    let rows = match PrivacyProfilesRepository::list(pool).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::warn!(
+                "[Profiles] could not list profiles to apply the managed default ({})",
+                e
+            );
+            return None;
+        }
+    };
+    let matched = rows.into_iter().find(|row| {
+        row.id == wanted || row.name.trim().eq_ignore_ascii_case(wanted.trim())
+    })?;
+    Some(EffectiveProfile {
+        profile: Some(PrivacyProfile::from_row(matched)),
+        source: ProfileSource::WorkspaceDefault,
+        client_id: None,
+        client_name: None,
+    })
+}
+
 /// The workspace default profile, or none when unset.
 pub async fn workspace_default(pool: &SqlitePool) -> EffectiveProfile {
+    // A managed configuration outranks the locally chosen default.
+    if let Some(managed) = managed_workspace_default(pool).await {
+        return managed;
+    }
     let settings = match PrivacySettingsRepository::get(pool).await {
         Ok(Some(row)) => row,
         Ok(None) => return EffectiveProfile::none(),

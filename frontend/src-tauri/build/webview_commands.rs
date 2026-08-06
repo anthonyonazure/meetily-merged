@@ -185,6 +185,8 @@ pub const WEBVIEW_COMMANDS: &[&str] = &[
     "m365_get_config",
     "m365_set_config",
     "m365_upcoming_events",
+    "managed_config_get",
+    "managed_config_reload",
     "meeting_billing_get",
     "meeting_billing_override_set",
     "meeting_get_client",

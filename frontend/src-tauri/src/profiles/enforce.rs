@@ -46,6 +46,9 @@ pub async fn guard_llm(
     scope: &Scope,
     provider: &str,
 ) -> Result<EffectiveProfile, String> {
+    // A fleet policy is checked before the profile: an organisation's allowlist is
+    // not negotiable by attaching a looser profile to a client.
+    crate::fleet::check_llm_provider(provider)?;
     let effective = resolve(pool, scope).await;
     effective.check_llm(provider)?;
     Ok(effective)

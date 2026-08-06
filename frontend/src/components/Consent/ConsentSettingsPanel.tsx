@@ -26,6 +26,7 @@ import {
   speakAnnouncement,
 } from '@/lib/consent';
 import type { ConsentLevel, ConsentSettings, EnforcementMode } from '@/types/consent';
+import { ManagedBanner } from '@/components/Fleet/ManagedBanner';
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -196,6 +197,17 @@ export function ConsentSettingsPanel() {
 
   return (
     <div className="mt-6 space-y-8">
+      {/* Consent is the setting an organisation is most likely to manage, so say so
+          before the operator wonders why a control will not move. */}
+      <ManagedBanner
+        keys={[
+          'consent_level_floor',
+          'consent_enforcement',
+          'blocked_title_keywords',
+          'blocked_domains',
+        ]}
+      />
+
       <section className="space-y-3">
         <div>
           <h2 className="section-header text-base">Default consent level</h2>

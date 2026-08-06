@@ -15,6 +15,16 @@ async fn debug_check_update() -> Result<String, String> {
     )];
     let current_version = env!("CARGO_PKG_VERSION");
 
+    // A managed configuration can switch update checks off for a fleet. Refusing
+    // here rather than filtering the report keeps the promise literal: with checks
+    // disabled, no request is made.
+    if !fleet::updates_allowed() {
+        return Ok(
+            "Update checks are disabled by your organisation's managed configuration. No request was made."
+                .to_string(),
+        );
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("tauri-plugin-updater/debug")
         .build()
@@ -171,6 +181,7 @@ pub mod database;
 pub mod detection;
 pub mod dictation;
 pub mod embeddings;
+pub mod fleet;
 pub mod m365;
 pub mod network;
 pub mod meeting_type;
@@ -640,9 +651,21 @@ pub fn run() {
             })
             .expect("Failed to initialize database");
 
-            // Network transparency: give the recorder a pool to write to before
-            // anything can make an HTTP request.
-            network::register_pool(_app.state::<state::AppState>().db_manager.pool().clone());
+            // Network transparency: give the recorder a pool to write to, then read
+            // the managed configuration and record which policy this launch applied.
+            //
+            // Order matters. The pool must be registered before anything can make an
+            // HTTP request, and the managed configuration must be read before the
+            // consent and privacy settings are consulted, so a policy file cannot be
+            // missed on the first recording after a push.
+            {
+                let pool = _app.state::<state::AppState>().db_manager.pool().clone();
+                network::register_pool(pool.clone());
+                let managed = fleet::reload();
+                tauri::async_runtime::block_on(async move {
+                    fleet::log_provenance(&pool, &managed).await;
+                });
+            }
 
             // Initialize bundled templates directory for dynamic template discovery
             log::info!("Initializing bundled templates directory...");
@@ -855,6 +878,10 @@ pub fn run() {
             network::commands::network_events_for_meeting,
             network::commands::network_expected_hosts,
             network::commands::network_events_export,
+
+            // Fleet configuration (managed policy from an MDM or RMM)
+            fleet::commands::managed_config_get,
+            fleet::commands::managed_config_reload,
 
             // Recording consent
             consent::commands::consent_get_settings,

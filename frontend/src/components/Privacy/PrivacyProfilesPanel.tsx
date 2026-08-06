@@ -39,6 +39,7 @@ import type {
   ProcessingMode,
 } from '@/types/privacy';
 import { RetentionSection } from './RetentionSection';
+import { ManagedBanner } from '@/components/Fleet/ManagedBanner';
 
 const WORKSPACE_NONE = '__none__';
 const MODES: ProcessingMode[] = ['local_only', 'cloud_allowed'];
@@ -404,6 +405,15 @@ export function PrivacyProfilesPanel() {
         starts, whether summaries can be shared, and how long meetings are kept. Attach one to a
         client in Settings → Clients and it applies to their meetings by itself.
       </p>
+
+      <ManagedBanner
+        keys={[
+          'default_privacy_profile',
+          'retention_days',
+          'allowed_transcription_providers',
+          'allowed_llm_providers',
+        ]}
+      />
 
       {/* Workspace default */}
       <div className="bg-surface border border-edge rounded-lg p-4 mb-6">

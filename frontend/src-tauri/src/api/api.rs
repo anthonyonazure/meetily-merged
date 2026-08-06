@@ -696,6 +696,12 @@ pub async fn api_save_transcript_config<R: Runtime>(
         "api_save_transcript_config called (native) for provider '{}'",
         &provider
     );
+
+    // A managed configuration can limit which transcription providers a technician
+    // may select. Refused at the save, so a disallowed provider is never stored and
+    // cannot be reached later.
+    crate::fleet::check_transcription_provider(&provider)?;
+
     let pool = state.db_manager.pool();
 
     if let Err(e) = SettingsRepository::save_transcript_config(

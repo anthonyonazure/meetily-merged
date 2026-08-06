@@ -174,7 +174,9 @@ pub async fn candidates(
         let Some(profile) = effective.profile.as_ref() else {
             continue;
         };
-        let Some(retention_days) = profile.retention_days else {
+        // A managed configuration caps how long anything is kept, so a fleet policy
+        // of "90 days maximum" applies even to a profile that says keep forever.
+        let Some(retention_days) = crate::fleet::retention_days(profile.retention_days) else {
             continue;
         };
         let remaining = days_until_purge(created_at, retention_days, now);
