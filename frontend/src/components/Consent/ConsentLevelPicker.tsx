@@ -9,8 +9,9 @@
  * visible.
  */
 
-import { useEffect, useState } from 'react';
-import { ChevronDown, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ChevronDown, Copy, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CONSENT_LEVELS, getConsentSettings, levelCopy } from '@/lib/consent';
 import type { ConsentLevel } from '@/types/consent';
@@ -24,13 +25,32 @@ interface ConsentLevelPickerProps {
 
 export function ConsentLevelPicker({ value, onChange, disabled }: ConsentLevelPickerProps) {
   const [defaultLevel, setDefaultLevel] = useState<ConsentLevel | null>(null);
+  const [disclaimer, setDisclaimer] = useState('');
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     getConsentSettings()
-      .then(settings => setDefaultLevel(settings.consent_level))
+      .then(settings => {
+        setDefaultLevel(settings.consent_level);
+        setDisclaimer(settings.disclaimer_text);
+      })
       .catch(error => console.warn('Could not read the default consent level:', error));
   }, []);
+
+  // The clipboard is the one notice mechanism that works in every meeting
+  // service, so it stays reachable at every level, not just the ones that
+  // open the pre-record sheet.
+  const copyDisclaimer = useCallback(async () => {
+    if (!disclaimer) return;
+    try {
+      await navigator.clipboard.writeText(disclaimer);
+      toast.success('Disclaimer copied. Paste it into the meeting chat.');
+      setOpen(false);
+    } catch (error) {
+      console.error('Could not copy the disclaimer:', error);
+      toast.error('Could not copy the disclaimer');
+    }
+  }, [disclaimer]);
 
   const effective = value ?? defaultLevel;
   if (!effective) return null;
@@ -88,6 +108,18 @@ export function ConsentLevelPicker({ value, onChange, disabled }: ConsentLevelPi
           >
             Back to the saved default
           </button>
+        )}
+        {disclaimer && (
+          <div className="mt-2 border-t border-edge pt-2">
+            <button
+              type="button"
+              onClick={copyDisclaimer}
+              className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-ink transition-colors hover:text-ink"
+            >
+              <Copy className="h-3 w-3" />
+              Copy the chat disclaimer
+            </button>
+          </div>
         )}
       </PopoverContent>
     </Popover>
