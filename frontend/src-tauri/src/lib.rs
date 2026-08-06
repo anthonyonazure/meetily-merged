@@ -168,6 +168,7 @@ pub mod detection;
 pub mod dictation;
 pub mod m365;
 pub mod notifications;
+pub mod profiles;
 pub mod share;
 pub mod ollama;
 pub mod onboarding;
