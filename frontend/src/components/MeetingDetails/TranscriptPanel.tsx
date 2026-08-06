@@ -4,7 +4,8 @@ import { Transcript, TranscriptSegmentData } from '@/types';
 import { TranscriptView } from '@/components/TranscriptView';
 import { VirtualizedTranscriptView } from '@/components/VirtualizedTranscriptView';
 import { TranscriptButtonGroup } from './TranscriptButtonGroup';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { consentRedactionState } from '@/lib/consent';
 
 interface TranscriptPanelProps {
   transcripts: Transcript[];
@@ -49,6 +50,25 @@ export function TranscriptPanel({
   meetingFolderPath,
   onRefetchTranscripts,
 }: TranscriptPanelProps) {
+  // Speakers with no consent confirmation, so `flag_only` per-speaker consent is
+  // visible on the segments themselves and not only in the Consent panel.
+  const [unconsentedSpeakers, setUnconsentedSpeakers] = useState<string[]>([]);
+  useEffect(() => {
+    if (!meetingId) {
+      setUnconsentedSpeakers([]);
+      return;
+    }
+    let cancelled = false;
+    consentRedactionState(meetingId)
+      .then(state => {
+        if (!cancelled) setUnconsentedSpeakers(state.unconsented_speakers);
+      })
+      .catch(error => console.warn('Could not read the consent state:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [meetingId]);
+
   // Convert transcripts to segments if pagination is not used but we want virtualization
   const convertedSegments = useMemo(() => {
     if (usePagination && segments) {
@@ -95,6 +115,7 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          unconsentedSpeakers={unconsentedSpeakers}
         />
       </div>
 

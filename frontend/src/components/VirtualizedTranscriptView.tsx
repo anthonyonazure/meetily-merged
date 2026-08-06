@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useReducer, startTransition, useEffect, useState, memo } from "react";
+import { useCallback, useMemo, useRef, useReducer, startTransition, useEffect, useState, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useTranscriptStreaming } from "@/hooks/useTranscriptStreaming";
@@ -34,6 +34,12 @@ export interface VirtualizedTranscriptViewProps {
     totalCount?: number;
     loadedCount?: number;
     onLoadMore?: () => void;
+    /**
+     * Speaker labels with no consent confirmation on record. Marked in place so
+     * `flag_only` per-speaker consent is visible in the transcript itself, not
+     * only in the Consent panel.
+     */
+    unconsentedSpeakers?: string[];
 }
 
 // Threshold for enabling virtualization (below this, use simple rendering)
@@ -92,6 +98,7 @@ const TranscriptSegment = memo(function TranscriptSegment({
     isStreaming,
     showConfidence,
     speaker,
+    unconsented = false,
 }: {
     id: string;
     timestamp: number;
@@ -100,6 +107,7 @@ const TranscriptSegment = memo(function TranscriptSegment({
     isStreaming: boolean;
     showConfidence: boolean;
     speaker?: string;
+    unconsented?: boolean;
 }) {
     const displayText = cleanStopWords(text) || (text.trim() === '' ? '[Silence]' : text);
     const speakerStyle = getSpeakerStyle(speaker);
@@ -121,10 +129,18 @@ const TranscriptSegment = memo(function TranscriptSegment({
                 </Tooltip>
                 <div className="flex-1">
                     {speaker && (
-                        <span className="mb-1 block">
+                        <span className="mb-1 flex items-center gap-1.5">
                             <span className={`text-xs speaker-chip ${speakerStyle.chip}`}>
                                 {speaker}
                             </span>
+                            {unconsented && (
+                                <span
+                                    className="text-xs text-muted-ink"
+                                    title="No consent confirmed for this speaker"
+                                >
+                                    consent not confirmed
+                                </span>
+                            )}
                         </span>
                     )}
                     {isStreaming ? (
@@ -154,7 +170,20 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
     totalCount = 0,
     loadedCount = 0,
     onLoadMore,
+    unconsentedSpeakers,
 }) => {
+    // Speaker labels with no consent confirmation. Lowercased once per render
+    // rather than once per segment.
+    const unconsentedSet = useMemo(
+        () => new Set((unconsentedSpeakers ?? []).map(label => label.trim().toLowerCase())),
+        [unconsentedSpeakers],
+    );
+    const isUnconsented = useCallback(
+        (speaker?: string) =>
+            Boolean(speaker) && unconsentedSet.has(String(speaker).trim().toLowerCase()),
+        [unconsentedSet],
+    );
+
     // Create scroll ref first - shared between virtualizer and auto-scroll hook
     const scrollRef = useRef<HTMLDivElement>(null);
     // Ref for infinite scroll trigger element
@@ -327,6 +356,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
                                         speaker={segment.speaker}
+                                        unconsented={isUnconsented(segment.speaker)}
                                     />
                                 </div>
                             );
@@ -384,6 +414,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
                                         speaker={segment.speaker}
+                                        unconsented={isUnconsented(segment.speaker)}
                                     />
                                 </motion.div>
                             );
