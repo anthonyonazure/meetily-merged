@@ -7,11 +7,20 @@ import { useRecordingState, RecordingStatus } from '@/contexts/RecordingStateCon
 import { recordingService } from '@/services/recordingService';
 import { showRecordingNotification } from '@/lib/recordingNotification';
 import { checkTranscriptionReadiness } from '@/lib/transcription-readiness';
+import { useConsentGate } from '@/hooks/useConsentGate';
+import type { ConsentLevel, ConsentPlan } from '@/types/consent';
 import { toast } from 'sonner';
 
 interface UseRecordingStartReturn {
   handleRecordingStart: () => Promise<void>;
   isAutoStarting: boolean;
+  /** Non-null while the pre-record consent sheet should be shown. */
+  consentPlan: ConsentPlan | null;
+  resolveConsent: () => void;
+  rejectConsent: () => void;
+  /** Consent level for the next recording only; null uses the saved default. */
+  consentLevelOverride: ConsentLevel | null;
+  setConsentLevelOverride: (level: ConsentLevel | null) => void;
 }
 
 /**
@@ -23,6 +32,11 @@ interface UseRecordingStartReturn {
  * - Transcript clearing on start
  * - Recording notification display
  * - Auto-start from sidebar via sessionStorage flag
+ * - Consent gating: every start path runs `ensureConsent` before touching the
+ *   backend. The Rust gate in `consent/gate.rs` is the actual enforcement, so a
+ *   path that somehow skipped this would be refused there rather than slip
+ *   through; this is what turns that refusal into a sheet the operator can act
+ *   in.
  */
 export function useRecordingStart(
   isRecording: boolean,
@@ -35,6 +49,15 @@ export function useRecordingStart(
   const { setIsMeetingActive } = useSidebar();
   const { selectedDevices, transcriptModelConfig } = useConfig();
   const { setStatus } = useRecordingState();
+  const {
+    consentPlan,
+    ensureConsent,
+    resolveConsent,
+    rejectConsent,
+    reportStartError,
+    levelOverride,
+    setLevelOverride,
+  } = useConsentGate();
 
   // Generate meeting title with timestamp
   const generateMeetingTitle = useCallback(() => {
@@ -80,6 +103,13 @@ export function useRecordingStart(
       console.log('Transcription provider ready - setting up meeting title and state');
 
       const randomTitle = generateMeetingTitle();
+
+      // Consent gate before anything else observable happens.
+      if (!await ensureConsent(randomTitle)) {
+        setStatus(RecordingStatus.IDLE);
+        return;
+      }
+
       setMeetingTitle(randomTitle);
 
       // Set STARTING status before initiating backend recording
@@ -106,12 +136,17 @@ export function useRecordingStart(
       await showRecordingNotification();
     } catch (error) {
       console.error('Failed to start recording:', error);
+      if (reportStartError(error)) {
+        setStatus(RecordingStatus.IDLE);
+        setIsRecording(false);
+        return;
+      }
       setStatus(RecordingStatus.ERROR, error instanceof Error ? error.message : 'Failed to start recording');
       setIsRecording(false); // Reset state on error
       // Re-throw so RecordingControls can handle device-specific errors
       throw error;
     }
-  }, [generateMeetingTitle, setMeetingTitle, setIsRecording, clearTranscripts, setIsMeetingActive, validateTranscriptionReady, selectedDevices, setStatus]);
+  }, [generateMeetingTitle, setMeetingTitle, setIsRecording, clearTranscripts, setIsMeetingActive, validateTranscriptionReady, selectedDevices, setStatus, ensureConsent, reportStartError]);
 
   // Check for autoStartRecording flag and start recording automatically
   useEffect(() => {
@@ -132,6 +167,12 @@ export function useRecordingStart(
           try {
             // Generate meeting title
             const generatedMeetingTitle = generateMeetingTitle();
+
+            if (!await ensureConsent(generatedMeetingTitle)) {
+              setStatus(RecordingStatus.IDLE);
+              setIsAutoStarting(false);
+              return;
+            }
 
             // Set STARTING status before initiating backend recording
             setStatus(RecordingStatus.STARTING, 'Initializing recording...');
@@ -155,8 +196,12 @@ export function useRecordingStart(
             await showRecordingNotification();
           } catch (error) {
             console.error('Failed to auto-start recording:', error);
-            setStatus(RecordingStatus.ERROR, error instanceof Error ? error.message : 'Failed to auto-start recording');
-            alert('Failed to start recording. Check console for details.');
+            if (reportStartError(error)) {
+              setStatus(RecordingStatus.IDLE);
+            } else {
+              setStatus(RecordingStatus.ERROR, error instanceof Error ? error.message : 'Failed to auto-start recording');
+              alert('Failed to start recording. Check console for details.');
+            }
           } finally {
             setIsAutoStarting(false);
           }
@@ -176,6 +221,8 @@ export function useRecordingStart(
     setIsMeetingActive,
     validateTranscriptionReady,
     setStatus,
+    ensureConsent,
+    reportStartError,
   ]);
 
   // Listen for direct recording trigger from sidebar when already on home page
@@ -197,6 +244,12 @@ export function useRecordingStart(
       try {
         // Generate meeting title
         const generatedMeetingTitle = generateMeetingTitle();
+
+        if (!await ensureConsent(generatedMeetingTitle)) {
+          setStatus(RecordingStatus.IDLE);
+          setIsAutoStarting(false);
+          return;
+        }
 
         // Set STARTING status before initiating backend recording
         setStatus(RecordingStatus.STARTING, 'Initializing recording...');
@@ -220,8 +273,12 @@ export function useRecordingStart(
         await showRecordingNotification();
       } catch (error) {
         console.error('Failed to start recording from sidebar:', error);
-        setStatus(RecordingStatus.ERROR, error instanceof Error ? error.message : 'Failed to start recording from sidebar');
-        alert('Failed to start recording. Check console for details.');
+        if (reportStartError(error)) {
+          setStatus(RecordingStatus.IDLE);
+        } else {
+          setStatus(RecordingStatus.ERROR, error instanceof Error ? error.message : 'Failed to start recording from sidebar');
+          alert('Failed to start recording. Check console for details.');
+        }
       } finally {
         setIsAutoStarting(false);
       }
@@ -243,10 +300,17 @@ export function useRecordingStart(
     setIsMeetingActive,
     validateTranscriptionReady,
     setStatus,
+    ensureConsent,
+    reportStartError,
   ]);
 
   return {
     handleRecordingStart,
     isAutoStarting,
+    consentPlan,
+    resolveConsent,
+    rejectConsent,
+    consentLevelOverride: levelOverride,
+    setConsentLevelOverride: setLevelOverride,
   };
 }

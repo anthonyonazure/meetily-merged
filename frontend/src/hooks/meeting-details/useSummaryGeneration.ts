@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { isOllamaNotInstalledError } from '@/lib/utils';
 import { BuiltInModelInfo } from '@/lib/builtin-ai';
 import { isFailedChunkPlaceholder } from '@/constants/transcriptPlaceholders';
+import { consentRedactionState, withholdUnconsented } from '@/lib/consent';
 import {
   detectAndCacheSummaryLanguage,
   readMeetingSummaryLanguage,
@@ -368,7 +369,25 @@ export function useSummaryGeneration({
       }) as { transcripts: Transcript[]; total_count: number; has_more: boolean };
 
       console.log(`✅ Fetched ${allData.transcripts.length} transcripts from database`);
-      return allData.transcripts;
+
+      // Strict per-speaker consent: an unconfirmed speaker's text must not
+      // reach the summary model. This is the one choke point both the generate
+      // and regenerate paths go through, which is why the filter lives here
+      // rather than in the payload builder.
+      try {
+        const redaction = await consentRedactionState(meetingId);
+        const { rows, withheld } = withholdUnconsented(allData.transcripts, redaction);
+        if (withheld > 0) {
+          console.log(`🔒 Withheld ${withheld} segment(s) from the summary (unconfirmed speakers)`);
+          toast.info('Some speech was left out of the summary', {
+            description: `${withheld} segment(s) from speakers you have not confirmed. Confirm them in the meeting's Consent panel to include them.`,
+          });
+        }
+        return rows;
+      } catch (error) {
+        console.warn('Could not read the consent state for this meeting:', error);
+        return allData.transcripts;
+      }
     } catch (error) {
       console.error('❌ Error fetching all transcripts:', error);
       toast.error('Failed to fetch transcripts for summary generation');

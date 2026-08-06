@@ -9,6 +9,7 @@ import { TranscriptPanel } from '@/components/MeetingDetails/TranscriptPanel';
 import { SummaryPanel } from '@/components/MeetingDetails/SummaryPanel';
 import { AgentsPanel } from '@/components/MeetingDetails/AgentsPanel';
 import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
+import { ConsentPanel } from '@/components/Consent/ConsentPanel';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 
 // Custom hooks
@@ -261,6 +262,7 @@ export default function PageContent({
           />
           <AgentsPanel meetingId={meeting.id} />
           <ChatPanel meetingId={meeting.id} />
+          <ConsentPanel meetingId={meeting.id} />
         </div>
       </div>
     </motion.div>

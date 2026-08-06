@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
+import { bindConsentToMeeting } from '@/lib/consent';
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { useRecordingState, RecordingStatus } from '@/contexts/RecordingStateContext';
@@ -284,6 +285,15 @@ export function useRecordingStop(
           if (!meetingId) {
             console.error('No meeting_id in response:', responseData);
             throw new Error('No meeting ID received from save operation');
+          }
+
+          // The consent log is keyed by a session id until this point, because
+          // the meeting row is only created here. Binding is insert-only, so it
+          // never rewrites an existing consent trail.
+          try {
+            await bindConsentToMeeting(meetingId);
+          } catch (error) {
+            console.warn('Failed to bind the consent record to this meeting:', error);
           }
 
           let shouldDetectSummaryLanguage = false;

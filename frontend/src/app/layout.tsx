@@ -26,6 +26,7 @@ import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
 import { ImportDialogProvider } from '@/contexts/ImportDialogContext'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import { MeetingStartingBanner } from '@/components/MeetingStartingBanner'
+import { SpeakerConsentPrompt } from '@/components/Consent/SpeakerConsentPrompt'
 import { ThemeProvider, THEME_STORAGE_KEY } from '@/contexts/ThemeContext'
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats'
 
@@ -394,6 +395,10 @@ export default function RootLayout({
                               {/* Calendar auto-join prompt banner (Join is
                                   the only thing that opens the link) */}
                               <MeetingStartingBanner />
+
+                              {/* Per-speaker consent prompt, fired when the
+                                  diarization pass first names the speakers */}
+                              <SpeakerConsentPrompt />
 
                               {/* Import audio overlay and dialog */}
                               <ImportDropOverlay visible={showDropOverlay} />

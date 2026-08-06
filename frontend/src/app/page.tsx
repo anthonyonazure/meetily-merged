@@ -17,6 +17,8 @@ import { useRecordingStart } from '@/hooks/useRecordingStart';
 import { useRecordingStop } from '@/hooks/useRecordingStop';
 import { useTranscriptRecovery } from '@/hooks/useTranscriptRecovery';
 import { TranscriptRecovery } from '@/components/TranscriptRecovery';
+import { ConsentSheet } from '@/components/Consent/ConsentSheet';
+import { ConsentLevelPicker } from '@/components/Consent/ConsentLevelPicker';
 import { indexedDBService } from '@/services/indexedDBService';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -40,7 +42,14 @@ export default function Home() {
   const { setIsMeetingActive, isCollapsed: sidebarCollapsed, refetchMeetings } = useSidebar();
   const { modals, messages, showModal, hideModal } = useModalState(transcriptModelConfig);
   const { isRecordingDisabled, setIsRecordingDisabled } = useRecordingStateSync(isRecording, setIsRecordingState, setIsMeetingActive);
-  const { handleRecordingStart } = useRecordingStart(isRecording, setIsRecordingState, showModal);
+  const {
+    handleRecordingStart,
+    consentPlan,
+    resolveConsent,
+    rejectConsent,
+    consentLevelOverride,
+    setConsentLevelOverride,
+  } = useRecordingStart(isRecording, setIsRecordingState, showModal);
 
   // Get handleRecordingStop function and setIsStopping (state comes from global context)
   const { handleRecordingStop, setIsStopping } = useRecordingStop(
@@ -224,7 +233,16 @@ export default function Home() {
                   marginLeft: sidebarCollapsed ? '4rem' : '16rem'
                 }}
               >
-                <div className="w-2/3 max-w-[750px] flex justify-center">
+                <div className="w-2/3 max-w-[750px] flex flex-col items-center gap-2">
+                  {/* Per-meeting consent level. Hidden while recording: the
+                      level in force then shows on the recording status bar. */}
+                  {!recordingState.isRecording && (
+                    <ConsentLevelPicker
+                      value={consentLevelOverride}
+                      onChange={setConsentLevelOverride}
+                      disabled={isRecordingDisabled}
+                    />
+                  )}
                   <div className="bg-surface rounded-full shadow-lg flex items-center">
                     <RecordingControls
                       isRecording={recordingState.isRecording}
@@ -246,6 +264,14 @@ export default function Home() {
               </div>
             </div>
           )}
+
+        {/* Pre-record consent sheet. Only rendered when the level in force
+            needs something from the operator, or a blocking rule matched. */}
+        <ConsentSheet
+          plan={consentPlan}
+          onCleared={resolveConsent}
+          onCancel={rejectConsent}
+        />
 
         {/* Status Overlays - Processing and Saving */}
         <StatusOverlays
