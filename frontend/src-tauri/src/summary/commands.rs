@@ -346,9 +346,9 @@ pub async fn api_process_transcript<R: Runtime>(
     template_id: Option<String>,
     summary_language: Option<String>,
     _auth_token: Option<String>,
-    /// True on a first generation, false when the operator is regenerating with a
-    /// template they picked themselves. Absent means "do not auto-choose", so an
-    /// older caller keeps the behaviour it had.
+    // True on a first generation, false when the operator is regenerating with a
+    // template they picked themselves. Absent means "do not auto-choose", so an
+    // older caller keeps the behaviour it had.
     auto_template: Option<bool>,
 ) -> Result<ProcessTranscriptResponse, String> {
     use uuid::Uuid;
