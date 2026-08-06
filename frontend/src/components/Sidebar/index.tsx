@@ -29,7 +29,6 @@ import { VisuallyHidden } from "@/components/ui/visually-hidden"
 import { MessageToast } from '../MessageToast';
 import Logo from '../Logo';
 import Info from '../Info';
-import { ComplianceNotification } from '../ComplianceNotification';
 import { UpcomingEvents } from './UpcomingEvents';
 import { Input } from '../ui/input';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../ui/input-group';
