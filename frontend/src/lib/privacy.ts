@@ -16,7 +16,10 @@ import type {
   PrivacyProfileInput,
   PrivacySettings,
   ProcessingMode,
+  PurgeCandidate,
   RedactionPreview,
+  RetentionRunResult,
+  RetentionSettings,
 } from '@/types/privacy';
 
 /** Prefix the Rust enforcement points use so the UI can explain a refusal. */
@@ -158,6 +161,22 @@ export function meetingPrivacyProfile(meetingId: string): Promise<MeetingProfile
 
 export function previewRedaction(text: string): Promise<RedactionPreview> {
   return invoke<RedactionPreview>('privacy_redaction_preview', { text });
+}
+
+export function retentionPreview(): Promise<PurgeCandidate[]> {
+  return invoke<PurgeCandidate[]>('retention_preview');
+}
+
+export function retentionRunNow(confirm: boolean): Promise<RetentionRunResult> {
+  return invoke<RetentionRunResult>('retention_run_now', { confirm });
+}
+
+export function getRetentionSettings(): Promise<RetentionSettings> {
+  return invoke<RetentionSettings>('retention_settings_get');
+}
+
+export function setRetentionDryRun(dryRun: boolean, confirm: boolean): Promise<RetentionSettings> {
+  return invoke<RetentionSettings>('retention_settings_set', { dryRun, confirm });
 }
 
 /** The starting point for a new profile: the most restrictive sensible one. */

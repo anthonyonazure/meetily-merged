@@ -1,5 +1,6 @@
 //! Tauri command surface for privacy profiles and retention.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -10,6 +11,7 @@ use crate::state::AppState;
 
 use super::redaction::{self, RedactionReport};
 use super::resolver::{self, EffectiveProfile};
+use super::retention::{self, PurgeCandidate, RetentionRunResult, RetentionSettings};
 use super::rules::{is_builtin_id, PrivacyProfile, ProcessingMode};
 use crate::consent::rules::{ConsentLevel, EnforcementMode};
 
@@ -69,6 +71,7 @@ pub struct PrivacySettings {
     /// None means no profile governs untagged meetings, and the app's global
     /// transcription, model, and consent settings apply as before.
     pub default_profile_id: Option<String>,
+    pub retention: RetentionSettings,
 }
 
 /// The resolved profile for a meeting plus the client it came through, for the
@@ -193,11 +196,13 @@ pub async fn privacy_profile_usage(
 
 #[tauri::command]
 pub async fn privacy_settings_get(state: State<'_, AppState>) -> Result<PrivacySettings, String> {
-    let row = PrivacySettingsRepository::get(state.db_manager.pool())
+    let pool = state.db_manager.pool();
+    let row = PrivacySettingsRepository::get(pool)
         .await
         .map_err(|e| format!("Failed to read privacy settings: {}", e))?;
     Ok(PrivacySettings {
         default_profile_id: row.and_then(|r| r.default_profile_id),
+        retention: retention::load_settings(pool).await,
     })
 }
 
@@ -280,4 +285,57 @@ pub async fn privacy_redaction_preview(text: String) -> Result<RedactionPreview,
 pub struct RedactionPreview {
     pub masked: String,
     pub report: RedactionReport,
+}
+
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+/// Meetings that will become purgeable in the next 30 days, plus any already
+/// past their window. Reads only.
+#[tauri::command]
+pub async fn retention_preview(
+    state: State<'_, AppState>,
+) -> Result<Vec<PurgeCandidate>, String> {
+    retention::candidates(
+        state.db_manager.pool(),
+        retention::PREVIEW_HORIZON_DAYS,
+        Utc::now(),
+    )
+    .await
+}
+
+/// Runs the sweep now. `confirm` must be true to delete anything, and dry run
+/// must already be off — otherwise this runs as a preview and says so in
+/// `refused_reason`.
+#[tauri::command]
+pub async fn retention_run_now(
+    state: State<'_, AppState>,
+    confirm: Option<bool>,
+) -> Result<RetentionRunResult, String> {
+    retention::run_now(state.db_manager.pool(), confirm.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn retention_settings_get(
+    state: State<'_, AppState>,
+) -> Result<RetentionSettings, String> {
+    Ok(retention::load_settings(state.db_manager.pool()).await)
+}
+
+/// Turns dry run on or off. Turning it off is what arms the background sweep,
+/// so it needs an explicit confirmation from the caller.
+#[tauri::command]
+pub async fn retention_settings_set(
+    state: State<'_, AppState>,
+    dry_run: bool,
+    confirm: Option<bool>,
+) -> Result<RetentionSettings, String> {
+    if !dry_run && !confirm.unwrap_or(false) {
+        return Err(
+            "Turning dry run off lets the hourly sweep delete recordings and notes. Confirm the change to continue."
+                .to_string(),
+        );
+    }
+    retention::save_dry_run(state.db_manager.pool(), dry_run).await
 }

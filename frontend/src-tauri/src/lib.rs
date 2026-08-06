@@ -557,6 +557,11 @@ pub fn run() {
             // Prompt-then-open only; gated by the `autojoin_prompt` setting.
             autojoin::spawn(_app.handle().clone());
 
+            // Retention sweep for privacy profiles with a retention window.
+            // Hourly, and it cannot delete anything until an operator turns dry
+            // run off, so the first launch after an upgrade never purges.
+            profiles::retention::spawn(_app.handle().clone());
+
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
 
@@ -836,7 +841,7 @@ pub fn run() {
             consent::commands::consent_log_export,
             consent::commands::consent_speak_announcement,
             consent::commands::consent_prefill_attendees,
-            // Per-client privacy profiles
+            // Per-client privacy profiles and retention
             profiles::commands::privacy_profiles_list,
             profiles::commands::privacy_profile_create,
             profiles::commands::privacy_profile_update,
@@ -847,6 +852,10 @@ pub fn run() {
             profiles::commands::privacy_redaction_preview,
             profiles::commands::client_set_privacy_profile,
             profiles::commands::meeting_privacy_profile,
+            profiles::commands::retention_preview,
+            profiles::commands::retention_run_now,
+            profiles::commands::retention_settings_get,
+            profiles::commands::retention_settings_set,
             // Calendar commands (macOS EventKit; clear error elsewhere)
             calendar::calendar_permission_status,
             calendar::calendar_request_access,
@@ -993,6 +1002,8 @@ pub fn run() {
 
                     // Same for the calendar auto-join scheduler.
                     autojoin::shutdown();
+                    // ...and the retention sweep.
+                    profiles::retention::shutdown();
 
                     tauri::async_runtime::block_on(async {
                         // Clean up database connection and checkpoint WAL

@@ -38,6 +38,7 @@ import type {
   PrivacyProfileInput,
   ProcessingMode,
 } from '@/types/privacy';
+import { RetentionSection } from './RetentionSection';
 
 const WORKSPACE_NONE = '__none__';
 const MODES: ProcessingMode[] = ['local_only', 'cloud_allowed'];
@@ -539,6 +540,8 @@ export function PrivacyProfilesPanel() {
           <span>Add profile</span>
         </Button>
       )}
+
+      <RetentionSection />
 
       <ConfirmationModal
         isOpen={deleteTarget !== null}

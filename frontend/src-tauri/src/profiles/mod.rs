@@ -12,10 +12,11 @@
 //! - `resolver.rs` — the single answer to "which profile governs this?"
 //! - `gate.rs` — the recording-start enforcement point, beside the consent gate
 //! - `enforce.rs` — model, sharing, and redaction helpers for the other paths
+//! - `retention.rs` — the hourly sweep and the purge, with its safety ladder
 //! - `commands.rs` — Tauri command surface
 //!
 //! Every enforcement point resolves through `resolver`, so transcription,
-//! models, consent, and sharing cannot disagree about the policy in
+//! models, consent, sharing, and retention cannot disagree about the policy in
 //! force. A profile with nothing resolved is a real answer: on upgrade the
 //! workspace default is unset and the app behaves exactly as it did before.
 
@@ -24,4 +25,5 @@ pub mod enforce;
 pub mod gate;
 pub mod redaction;
 pub mod resolver;
+pub mod retention;
 pub mod rules;
