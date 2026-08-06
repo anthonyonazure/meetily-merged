@@ -581,6 +581,21 @@ impl SummaryService {
                         meeting_id
                     );
 
+                    // Meeting-type detection: classify from the transcript now that
+                    // one exists, so the *next* summary of this meeting (and its
+                    // chip in the UI) has a type to work from. Deliberately after
+                    // the summary rather than before: the same provider and model
+                    // are already resolved, and a classification failure must never
+                    // delay or fail a summary the user is waiting for.
+                    crate::meeting_type::classify::classify_meeting(
+                        &pool,
+                        &meeting_id,
+                        &model_provider,
+                        &model_name,
+                        app_data_dir.clone(),
+                    )
+                    .await;
+
                     // Meeting Agents: kick off enabled auto-run agents (v1: the
                     // Action Tracker) with the same provider/model that produced
                     // this summary. Fire-and-forget; agent failures never affect

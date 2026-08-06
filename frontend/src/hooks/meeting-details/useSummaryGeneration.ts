@@ -142,6 +142,10 @@ export function useSummaryGeneration({
         customPrompt: customPrompt,
         templateId: selectedTemplate,
         summaryLanguage,
+        // On a first generation the detected meeting type may redirect the
+        // template. A regeneration is an explicit choice by the operator, so the
+        // detector does not get a second vote.
+        autoTemplate: !isRegeneration,
       }) as any;
 
       const process_id = result.process_id;

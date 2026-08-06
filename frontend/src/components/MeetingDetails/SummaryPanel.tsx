@@ -10,6 +10,8 @@ import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
 import { ShareSummaryMenu } from './ShareSummaryMenu';
 import { MeetingProfileChip } from '@/components/Privacy/MeetingProfileChip';
 import { ClientChip } from '@/components/Clients/ClientChip';
+import { MeetingCostChip } from '@/components/Billing/MeetingCostChip';
+import { MeetingTypeChip } from '@/components/MeetingType/MeetingTypeChip';
 import { useEffect, useRef, useState, RefObject } from 'react';
 import { toast } from 'sonner';
 import { Languages, ChevronDown } from 'lucide-react';
@@ -268,12 +270,20 @@ export function SummaryPanel({
       <div className="p-4 border-b border-edge">
         {/* Client tag: which client this meeting belongs to (Client Memory), and
             the privacy profile that governed this meeting because of it. */}
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <ClientChip
             meetingId={meeting.id}
             onClientChange={() => setProfileRefreshKey(key => key + 1)}
           />
           <MeetingProfileChip meetingId={meeting.id} refreshKey={profileRefreshKey} />
+          {/* What this meeting is worth, and what kind of meeting it was. Both
+              refetch when the client tag changes, since both depend on it. */}
+          <MeetingCostChip meetingId={meeting.id} refreshKey={profileRefreshKey} />
+          <MeetingTypeChip
+            meetingId={meeting.id}
+            selectedTemplate={selectedTemplate}
+            refreshKey={profileRefreshKey}
+          />
         </div>
         {/* <EditableTitle
           title={meetingTitle}

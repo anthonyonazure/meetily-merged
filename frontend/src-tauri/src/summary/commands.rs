@@ -32,6 +32,16 @@ pub struct SummaryResponse {
 pub struct ProcessTranscriptResponse {
     pub message: String,
     pub process_id: String,
+    /// The template this run will actually use. Present so the UI can always show
+    /// which template produced a summary, including when the meeting type picked it
+    /// instead of the operator.
+    pub template_id: String,
+    /// Why that template was chosen: `client_mapping`, `workspace_mapping`,
+    /// `requested`, `low_confidence`, or `not_classified`.
+    pub template_source: String,
+    /// The meeting's detected type, when it has one.
+    pub meeting_type: Option<String>,
+    pub meeting_type_confidence: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -336,6 +346,10 @@ pub async fn api_process_transcript<R: Runtime>(
     template_id: Option<String>,
     summary_language: Option<String>,
     _auth_token: Option<String>,
+    /// True on a first generation, false when the operator is regenerating with a
+    /// template they picked themselves. Absent means "do not auto-choose", so an
+    /// older caller keeps the behaviour it had.
+    auto_template: Option<bool>,
 ) -> Result<ProcessTranscriptResponse, String> {
     use uuid::Uuid;
 
@@ -361,8 +375,36 @@ pub async fn api_process_transcript<R: Runtime>(
     )
     .await?;
 
+    // Output polish: fillers dropped, stutters collapsed, spoken numbers and times
+    // written as digits, in the copy the model sees. The stored `transcripts` rows
+    // are untouched, so this is reversible and improves retroactively.
+    let text = crate::polish::polish_block(&text);
+
     let final_prompt = custom_prompt.unwrap_or_else(|| "".to_string());
-    let final_template_id = template_id.unwrap_or_else(|| "standard_meeting".to_string());
+    let requested_template_id = template_id.unwrap_or_else(|| "standard_meeting".to_string());
+
+    // Meeting-type detection can redirect the template on a first generation. A
+    // regeneration always honours the operator's pick: once they have chosen, the
+    // detector does not get a second vote.
+    let template_choice = if auto_template.unwrap_or(false) {
+        crate::meeting_type::commands::resolve_template(&pool, &m_id, &requested_template_id).await
+    } else {
+        crate::meeting_type::TemplateChoice {
+            template_id: requested_template_id.clone(),
+            source: crate::meeting_type::TemplateChoiceSource::Requested,
+            meeting_type: None,
+            confidence: None,
+        }
+    };
+    let final_template_id = template_choice.template_id.clone();
+    if final_template_id != requested_template_id {
+        log_info!(
+            "Meeting type {:?} redirected the summary template from {} to {}",
+            template_choice.meeting_type.map(|t| t.as_str()),
+            requested_template_id,
+            final_template_id
+        );
+    }
 
     // Normalise empty / whitespace-only to None so "" and null behave identically
     let summary_language = summary_language.and_then(|s| {
@@ -417,6 +459,10 @@ pub async fn api_process_transcript<R: Runtime>(
     Ok(ProcessTranscriptResponse {
         message: "Summary generation started".to_string(),
         process_id: m_id,
+        template_id: template_choice.template_id,
+        template_source: template_choice.source.as_str().to_string(),
+        meeting_type: template_choice.meeting_type.map(|t| t.as_str().to_string()),
+        meeting_type_confidence: template_choice.confidence,
     })
 }
 
