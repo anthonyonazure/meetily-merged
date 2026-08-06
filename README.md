@@ -52,6 +52,8 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 > - **Hardening** (from [henryvn27/meetily_improved](https://github.com/henryvn27/meetily_improved)): least-privilege Tauri command allowlist with a drift-failing contract test, webview CSP with zero network access, cargo-deny supply-chain policy, SHA-pinned CI actions + CodeQL, dependency advisory patches, hardened external-URL opening.
 >
 > Auto-update signing keys and endpoints from all forks were stripped; no fork author retains an update channel into this build.
+>
+> Release integrity and signing: see [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).
 
 ---
 
