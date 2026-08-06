@@ -611,8 +611,11 @@ async fn run_agent_llm(
 
     let settings = resolve_llm_settings(pool, model_provider).await?;
     let context = build_agent_context(pool, meeting_id, agent).await?;
-    let (context, _) = crate::profiles::enforce::redact_for(&effective, &context);
+    // Redact the built prompt, not the context struct: the prompt is the exact
+    // text that leaves for the model, so masking there covers every field the
+    // builder chose to include.
     let user_prompt = (agent.build_user_prompt)(&context);
+    let (user_prompt, _) = crate::profiles::enforce::redact_for(&effective, &user_prompt);
 
     let client = reqwest::Client::new();
     generate_summary(
