@@ -1,8 +1,11 @@
 pub mod agent;
+pub mod billing;
+pub mod branding;
 pub mod chat;
 pub mod client;
 pub mod consent;
 pub mod meeting;
+pub mod meeting_type;
 pub mod memory;
 pub mod profile;
 pub mod setting;

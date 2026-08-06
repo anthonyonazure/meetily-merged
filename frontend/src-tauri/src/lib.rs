@@ -157,6 +157,8 @@ pub mod agents;
 pub mod api;
 pub mod audio;
 pub mod autojoin;
+pub mod billing;
+pub mod branding;
 pub mod calendar;
 pub mod chat;
 pub mod clients;
@@ -167,7 +169,9 @@ pub mod database;
 pub mod detection;
 pub mod dictation;
 pub mod m365;
+pub mod meeting_type;
 pub mod notifications;
+pub mod polish;
 pub mod profiles;
 pub mod share;
 pub mod ollama;
@@ -856,6 +860,28 @@ pub fn run() {
             profiles::commands::retention_run_now,
             profiles::commands::retention_settings_get,
             profiles::commands::retention_settings_set,
+            // Billable time and meeting cost
+            billing::commands::billing_settings_get,
+            billing::commands::billing_settings_set,
+            billing::commands::client_billing_get,
+            billing::commands::client_billing_set,
+            billing::commands::meeting_billing_get,
+            billing::commands::meeting_billing_override_set,
+            billing::commands::billing_report,
+            billing::commands::billing_export,
+            // Client-branded deliverables
+            branding::commands::branding_get,
+            branding::commands::branding_set,
+            branding::commands::branding_pick_logo,
+            branding::commands::branding_clear_logo,
+            branding::commands::branding_preview,
+            // Meeting-type detection and template mapping
+            meeting_type::commands::meeting_type_get,
+            meeting_type::commands::meeting_type_set,
+            meeting_type::commands::meeting_type_clear,
+            meeting_type::commands::meeting_type_detect,
+            meeting_type::commands::meeting_type_mappings_get,
+            meeting_type::commands::meeting_type_mappings_set,
             // Calendar commands (macOS EventKit; clear error elsewhere)
             calendar::calendar_permission_status,
             calendar::calendar_request_access,

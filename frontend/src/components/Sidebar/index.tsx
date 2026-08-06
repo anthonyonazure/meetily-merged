@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronRight, File, Settings, ChevronLeftCircle, ChevronRightCircle, Calendar, StickyNote, Home, Trash2, Mic, Square, Plus, Search, Pencil, NotebookPen, SearchIcon, X, Upload, ListChecks, Briefcase } from 'lucide-react';
+import { ChevronDown, ChevronRight, File, Settings, ChevronLeftCircle, ChevronRightCircle, Calendar, StickyNote, Home, Trash2, Mic, Square, Plus, Search, Pencil, NotebookPen, SearchIcon, X, Upload, ListChecks, Briefcase, Receipt } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from './SidebarProvider';
 import type { CurrentMeeting } from '@/components/Sidebar/SidebarProvider';
@@ -580,6 +580,21 @@ const Sidebar: React.FC = () => {
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                onClick={() => router.push('/billing')}
+                className={`p-2 rounded-lg transition-colors duration-150 ${pathname === '/billing' ? 'bg-active' : 'hover:bg-active/60'
+                  }`}
+              >
+                <Receipt className="w-5 h-5 text-muted-ink" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>Billable time</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
                 onClick={() => router.push('/settings')}
                 className={`p-2 rounded-lg transition-colors duration-150 ${isSettingsPage ? 'bg-active' : 'hover:bg-active/60'
                   }`}
@@ -805,6 +820,13 @@ const Sidebar: React.FC = () => {
                       {staleCommitmentCount}
                     </span>
                   )}
+                </div>
+                <div
+                  onClick={() => router.push('/billing')}
+                  className="p-3  text-lg font-semibold items-center hover:bg-active/60 h-10   flex mx-3 rounded-lg cursor-pointer"
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  <span>Billable time</span>
                 </div>
                 <UpcomingEvents />
               </>

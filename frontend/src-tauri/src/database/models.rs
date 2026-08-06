@@ -286,6 +286,68 @@ pub struct ConsentEvent {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// The single `billing_settings` row. `default_hourly_rate` is nullable on
+/// purpose: None means "nobody has set a rate", which the report shows as
+/// "no rate set" rather than pricing the work at zero.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct BillingSettingsRow {
+    pub default_hourly_rate: Option<f64>,
+    pub currency: String,
+    pub rounding_minutes: i64,
+    pub min_billable_minutes: i64,
+    pub include_internal: bool,
+}
+
+/// One `client_billing` row. Absent for clients nobody has configured; a NULL
+/// `hourly_rate` means "use the workspace rate".
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ClientBillingRow {
+    pub client_id: String,
+    pub hourly_rate: Option<f64>,
+    pub billable: bool,
+}
+
+/// One `meeting_billing_overrides` row. Both nullable fields mean "inherit".
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct MeetingBillingOverrideRow {
+    pub meeting_id: String,
+    pub billable: Option<bool>,
+    pub minutes_override: Option<i64>,
+    pub note: String,
+}
+
+/// The single `branding` row: what a client-facing export is stamped with.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct BrandingRow {
+    pub firm_name: String,
+    pub logo_path: Option<String>,
+    pub footer_text: String,
+    pub accent_hex: String,
+    pub include_logo: bool,
+    pub include_footer: bool,
+}
+
+/// One `meeting_types` row: the classification for a meeting, its confidence,
+/// and whether a model or a person put it there.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct MeetingTypeRow {
+    pub meeting_id: String,
+    pub meeting_type: String,
+    pub confidence: f64,
+    pub source: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// One `meeting_type_templates` row. `client_id` is `''` for the workspace
+/// mapping (see the migration for why it is not NULL).
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct MeetingTypeTemplateRow {
+    pub meeting_type: String,
+    pub client_id: String,
+    pub template_id: String,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AgentSettingRow {
     pub agent_id: String,

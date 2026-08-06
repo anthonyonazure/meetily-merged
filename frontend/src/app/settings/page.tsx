@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock } from 'lucide-react';
+import { ArrowLeft, Settings2, Mic, Database as DatabaseIcon, SparkleIcon, FlaskConical, Plug, Briefcase, ShieldCheck, Lock, Receipt, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
@@ -14,6 +14,9 @@ import { IntegrationsSettings } from '@/components/IntegrationsSettings';
 import { ClientsSettings } from '@/components/ClientsSettings';
 import { ConsentSettingsPanel } from '@/components/Consent/ConsentSettingsPanel';
 import { PrivacyProfilesPanel } from '@/components/Privacy/PrivacyProfilesPanel';
+import { BillingSettingsPanel } from '@/components/Billing/BillingSettingsPanel';
+import { DeliverablesPanel } from '@/components/Branding/DeliverablesPanel';
+import { TemplateMappingPanel } from '@/components/MeetingType/TemplateMappingPanel';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -25,6 +28,8 @@ const TABS = [
   { value: 'summaryModels', label: 'Summary', icon: SparkleIcon },
   { value: 'integrations', label: 'Integrations', icon: Plug },
   { value: 'clients', label: 'Clients', icon: Briefcase },
+  { value: 'billing', label: 'Billing', icon: Receipt },
+  { value: 'deliverables', label: 'Deliverables', icon: FileText },
   { value: 'consent', label: 'Consent', icon: ShieldCheck },
   { value: 'privacy', label: 'Privacy profiles', icon: Lock },
   { value: 'beta', label: 'Beta', icon: FlaskConical }
@@ -132,12 +137,21 @@ export default function SettingsPage() {
             </TabsContent>
             <TabsContent value="summaryModels">
               <SummaryModelSettings />
+              <div className="mt-8 border-t border-edge pt-8">
+                <TemplateMappingPanel />
+              </div>
             </TabsContent>
             <TabsContent value="integrations">
               <IntegrationsSettings />
             </TabsContent>
             <TabsContent value="clients">
               <ClientsSettings />
+            </TabsContent>
+            <TabsContent value="billing">
+              <BillingSettingsPanel />
+            </TabsContent>
+            <TabsContent value="deliverables">
+              <DeliverablesPanel />
             </TabsContent>
             <TabsContent value="consent">
               <ConsentSettingsPanel />

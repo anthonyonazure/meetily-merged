@@ -26,6 +26,7 @@ import {
 import { FollowThroughCard } from '@/components/Clients/FollowThroughCard';
 import { ChatPanel } from '@/components/MeetingDetails/ChatPanel';
 import { ProfilePicker } from '@/components/Privacy/ProfilePicker';
+import { ClientRateCard } from '@/components/Billing/ClientRateCard';
 const KIND_META: Record<string, { label: string; icon: typeof ListTodo }> = {
   commitment: { label: 'Commitment', icon: ListTodo },
   decision: { label: 'Decision', icon: Gavel },
@@ -302,14 +303,21 @@ export default function ClientsPage() {
                 : ''}
             </p>
 
-            {/* Which privacy profile governs this client's meetings. */}
-            <div className="bg-surface border border-edge rounded-lg p-4 mb-6">
+            {/* Which privacy profile governs this client's meetings, and what
+                their time is worth. */}
+            <div className="bg-surface border border-edge rounded-lg p-4 mb-6 space-y-4">
               <ProfilePicker
                 clientId={selectedClient.id}
                 clientName={selectedClient.name}
                 profileId={selectedClient.privacy_profile_id}
                 onChange={() => void refreshClients()}
               />
+              <div className="border-t border-edge pt-4">
+                <ClientRateCard
+                  clientId={selectedClient.id}
+                  clientName={selectedClient.name}
+                />
+              </div>
             </div>
 
             <FollowThroughCard
