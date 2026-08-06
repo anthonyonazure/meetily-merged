@@ -314,7 +314,16 @@ async fn make_api_request<R: Runtime, T: for<'de> Deserialize<'de>>(
         request = request.body(body_str.to_string());
     }
 
-    let response = request.send().await.map_err(|e| {
+    let bytes_out = body.map(|b| b.len() as u64).unwrap_or(0);
+    let outcome = request.send().await;
+    crate::network::observe(
+        crate::network::Purpose::LicenseCheck,
+        &url,
+        &method.to_uppercase(),
+        bytes_out,
+        &outcome,
+    );
+    let response = outcome.map_err(|e| {
         let error_msg = format!("Request failed: {}", e);
         log_error!("{}", error_msg);
         error_msg
@@ -1155,13 +1164,23 @@ pub async fn test_backend_connection<R: Runtime>(
 
     log_debug!("Testing connection to: {}", server_url);
 
-    let mut request = client.get(&format!("{}/docs", server_url));
+    let probe_url = format!("{}/docs", server_url);
+    let mut request = client.get(&probe_url);
 
     if let Some(token) = auth_token {
         request = request.header("Authorization", format!("Bearer {}", token));
     }
 
-    match request.send().await {
+    let outcome = request.send().await;
+    crate::network::observe(
+        crate::network::Purpose::LicenseCheck,
+        &probe_url,
+        "GET",
+        0,
+        &outcome,
+    );
+
+    match outcome {
         Ok(response) => {
             let status = response.status();
             log_debug!("Backend responded with status: {}", status);
@@ -1197,7 +1216,16 @@ pub async fn debug_backend_connection<R: Runtime>(app: AppHandle<R>) -> Result<S
 
     log_debug!("Testing connection to: {}", test_url);
 
-    match client.get(&test_url).send().await {
+    let outcome = client.get(&test_url).send().await;
+    crate::network::observe(
+        crate::network::Purpose::LicenseCheck,
+        &test_url,
+        "GET",
+        0,
+        &outcome,
+    );
+
+    match outcome {
         Ok(response) => {
             let status = response.status();
             log_debug!("✓ Backend responded with status: {}", status);
