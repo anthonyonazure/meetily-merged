@@ -139,10 +139,7 @@ impl DetectorState {
                 if let Some(bundle) = candidate {
                     info!("detection: Idle → Sustaining");
                     debug!("detection: Idle → Sustaining({})", bundle);
-                    self.phase = Phase::Sustaining {
-                        bundle,
-                        since: now,
-                    };
+                    self.phase = Phase::Sustaining { bundle, since: now };
                 }
                 None
             }
@@ -150,11 +147,13 @@ impl DetectorState {
                 // Upgrade to a strictly-higher-priority candidate if
                 // one has appeared since we entered Sustaining.
                 if let Some(next) = candidate.as_deref() {
-                    if next != bundle
-                        && matcher::priority_of(next) < matcher::priority_of(&bundle)
+                    if next != bundle && matcher::priority_of(next) < matcher::priority_of(&bundle)
                     {
                         info!("detection: Sustaining → Sustaining (priority upgrade)");
-                        debug!("detection: Sustaining({}) → Sustaining({}) (upgraded)", bundle, next);
+                        debug!(
+                            "detection: Sustaining({}) → Sustaining({}) (upgraded)",
+                            bundle, next
+                        );
                         self.phase = Phase::Sustaining {
                             bundle: next.to_string(),
                             since: now,
@@ -166,7 +165,10 @@ impl DetectorState {
                     // Lost the sustain candidate before threshold — restart or go idle.
                     if let Some(next) = candidate {
                         info!("detection: Sustaining → Sustaining (switched)");
-                        debug!("detection: Sustaining({}) → Sustaining({}) (switched)", bundle, next);
+                        debug!(
+                            "detection: Sustaining({}) → Sustaining({}) (switched)",
+                            bundle, next
+                        );
                         self.phase = Phase::Sustaining {
                             bundle: next,
                             since: now,
@@ -270,7 +272,10 @@ impl DetectorState {
                 self.phase = Phase::Idle;
 
                 if self.is_recording {
-                    info!("detection: Ending → Idle; firing MeetingEnded {}", display_name);
+                    info!(
+                        "detection: Ending → Idle; firing MeetingEnded {}",
+                        display_name
+                    );
                     debug!("detection: Ending({}) → Idle (fire end)", bundle);
                     Some(DetectionEvent::MeetingEnded(meeting))
                 } else {
@@ -286,7 +291,10 @@ impl DetectorState {
     pub fn dismiss(&mut self, bundle_id: &str, now: Instant) {
         let until = now + self.config.dismissal_cooldown;
         self.dismissed.insert(bundle_id.to_string(), until);
-        debug!("detection: dismissed bundle for {:?}", self.config.dismissal_cooldown);
+        debug!(
+            "detection: dismissed bundle for {:?}",
+            self.config.dismissal_cooldown
+        );
     }
 
     fn is_dismissed(&self, bundle_id: &str, now: Instant) -> bool {
@@ -301,7 +309,11 @@ impl DetectorState {
         self.dismissed.retain(|_, until| *until > now);
         let after = self.dismissed.len();
         if before != after {
-            debug!("detection: reaped {} expired dismissals ({} remain)", before - after, after);
+            debug!(
+                "detection: reaped {} expired dismissals ({} remain)",
+                before - after,
+                after
+            );
         }
     }
 
@@ -352,7 +364,7 @@ impl DetectorState {
                     bundle_id: Some(bundle.clone()),
                     elapsed_ms: Some(elapsed.as_millis() as u64),
                     remaining_ms: Some(
-                        self.config.end_silence.saturating_sub(elapsed).as_millis() as u64,
+                        self.config.end_silence.saturating_sub(elapsed).as_millis() as u64
                     ),
                     is_recording: self.is_recording,
                 }
@@ -552,7 +564,10 @@ mod tests {
         let t_flicker_start = t_release + Duration::from_secs(5);
         s.advance(t_flicker_start, &snapshot(&["us.zoom.xos"]));
         s.advance(t_flicker_start + Duration::from_secs(1), &snapshot(&[]));
-        s.advance(t_flicker_start + Duration::from_secs(3), &snapshot(&["us.zoom.xos"]));
+        s.advance(
+            t_flicker_start + Duration::from_secs(3),
+            &snapshot(&["us.zoom.xos"]),
+        );
         // Short reacquires reset the reacquire clock; state stays Ending.
         assert!(!s.is_detected());
         assert!(!s.is_idle());
@@ -575,10 +590,7 @@ mod tests {
         let t_later = t0 + Duration::from_secs(300);
         s.advance(t_later, &snapshot(&["us.zoom.xos"]));
         let t_still_later = t_later + Duration::from_secs(60);
-        assert_eq!(
-            s.advance(t_still_later, &snapshot(&["us.zoom.xos"])),
-            None
-        );
+        assert_eq!(s.advance(t_still_later, &snapshot(&["us.zoom.xos"])), None);
         assert!(s.is_idle());
     }
 

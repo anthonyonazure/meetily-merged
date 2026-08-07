@@ -32,19 +32,17 @@ impl AgentRunsRepository {
         run_id: &str,
         output_md: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query("UPDATE agent_runs SET status = 'completed', output_md = ?, error = NULL WHERE id = ?")
-            .bind(output_md)
-            .bind(run_id)
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "UPDATE agent_runs SET status = 'completed', output_md = ?, error = NULL WHERE id = ?",
+        )
+        .bind(output_md)
+        .bind(run_id)
+        .execute(pool)
+        .await?;
         Ok(())
     }
 
-    pub async fn fail_run(
-        pool: &SqlitePool,
-        run_id: &str,
-        error: &str,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn fail_run(pool: &SqlitePool, run_id: &str, error: &str) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE agent_runs SET status = 'error', error = ? WHERE id = ?")
             .bind(error)
             .bind(run_id)
@@ -184,9 +182,11 @@ pub struct AgentSettingsRepository;
 
 impl AgentSettingsRepository {
     pub async fn get_all(pool: &SqlitePool) -> Result<Vec<AgentSettingRow>, sqlx::Error> {
-        sqlx::query_as::<_, AgentSettingRow>("SELECT agent_id, enabled, auto_run FROM agent_settings")
-            .fetch_all(pool)
-            .await
+        sqlx::query_as::<_, AgentSettingRow>(
+            "SELECT agent_id, enabled, auto_run FROM agent_settings",
+        )
+        .fetch_all(pool)
+        .await
     }
 
     pub async fn get(

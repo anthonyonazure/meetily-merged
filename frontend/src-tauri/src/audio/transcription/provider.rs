@@ -13,7 +13,10 @@ use async_trait::async_trait;
 #[derive(Debug, Clone)]
 pub enum TranscriptionError {
     ModelNotLoaded,
-    AudioTooShort { samples: usize, minimum: usize },
+    AudioTooShort {
+        samples: usize,
+        minimum: usize,
+    },
     EngineFailed(String),
     UnsupportedLanguage(String),
     /// Remote provider rejected credentials (HTTP 401 or 403). Distinct from

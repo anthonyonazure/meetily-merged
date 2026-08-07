@@ -20,8 +20,7 @@ use crate::detection::signals::mic_activity;
 use crate::detection::state::{DetectorConfig, DetectorState};
 use crate::detection::types::{DetectedMeetingEvent, DetectionEvent};
 use crate::notifications::commands::{
-    show_meeting_detected_notification, show_meeting_ended_notification,
-    NotificationManagerState,
+    show_meeting_detected_notification, show_meeting_ended_notification, NotificationManagerState,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -95,12 +94,18 @@ where
     let sampler = match mic_activity::create() {
         Ok(s) => s,
         Err(e) => {
-            warn!("Meeting detection disabled — failed to init mic-activity sampler: {}", e);
+            warn!(
+                "Meeting detection disabled — failed to init mic-activity sampler: {}",
+                e
+            );
             return service;
         }
     };
 
-    info!("Meeting detection: spawning poll task ({}s interval)", POLL_INTERVAL.as_secs());
+    info!(
+        "Meeting detection: spawning poll task ({}s interval)",
+        POLL_INTERVAL.as_secs()
+    );
 
     tauri::async_runtime::spawn(async move {
         let mut ticker = tokio::time::interval(POLL_INTERVAL);
@@ -143,14 +148,17 @@ where
                     // and strips `bundle_id` from the payload — agents
                     // can still read it via `get_detection_state`.
                     if pref_show_meeting_detected(mgr_state.inner()).await {
-                        let payload = DetectedMeetingEvent { display_name: m.display_name.clone() };
+                        let payload = DetectedMeetingEvent {
+                            display_name: m.display_name.clone(),
+                        };
                         if let Err(e) = app.emit("meeting-detected", &payload) {
                             debug!("failed to emit meeting-detected event: {}", e);
                         }
                     }
-                    if let Err(e) = show_meeting_detected_notification(
-                        &app, mgr_state.inner(), m.display_name,
-                    ).await {
+                    if let Err(e) =
+                        show_meeting_detected_notification(&app, mgr_state.inner(), m.display_name)
+                            .await
+                    {
                         error!("Failed to show meeting-detected notification: {}", e);
                     }
                 }
@@ -158,14 +166,17 @@ where
                     info!("Meeting detection: ENDED {}", m.display_name);
                     debug!("Meeting detection: ENDED bundle={}", m.bundle_id);
                     if pref_show_meeting_ended(mgr_state.inner()).await {
-                        let payload = DetectedMeetingEvent { display_name: m.display_name.clone() };
+                        let payload = DetectedMeetingEvent {
+                            display_name: m.display_name.clone(),
+                        };
                         if let Err(e) = app.emit("meeting-ended", &payload) {
                             debug!("failed to emit meeting-ended event: {}", e);
                         }
                     }
-                    if let Err(e) = show_meeting_ended_notification(
-                        &app, mgr_state.inner(), m.display_name,
-                    ).await {
+                    if let Err(e) =
+                        show_meeting_ended_notification(&app, mgr_state.inner(), m.display_name)
+                            .await
+                    {
                         error!("Failed to show meeting-ended notification: {}", e);
                     }
                 }
@@ -197,9 +208,7 @@ async fn pref_show_meeting_detected<R: Runtime>(
     }
 }
 
-async fn pref_show_meeting_ended<R: Runtime>(
-    manager_state: &NotificationManagerState<R>,
-) -> bool {
+async fn pref_show_meeting_ended<R: Runtime>(manager_state: &NotificationManagerState<R>) -> bool {
     let guard = manager_state.read().await;
     match guard.as_ref() {
         Some(manager) => {

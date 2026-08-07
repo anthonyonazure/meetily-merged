@@ -1,16 +1,14 @@
 use crate::notifications::{
-    types::Notification,
-    settings::NotificationSettings,
-    manager::NotificationManager,
+    manager::NotificationManager, settings::NotificationSettings, types::Notification,
 };
 
 use anyhow::Result;
-use log::{info as log_info, error as log_error, warn as log_warn};
+use log::{error as log_error, info as log_info, warn as log_warn};
 use serde::{Deserialize, Serialize};
-use tauri::{State, AppHandle, Runtime, Wry};
+use std::sync::Arc;
+use tauri::{AppHandle, Runtime, State, Wry};
 #[cfg(not(target_os = "macos"))]
 use tauri_plugin_notification::NotificationExt;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Shared notification manager state
@@ -48,7 +46,7 @@ pub async fn initialize_notification_manager<R: Runtime>(
 /// Get notification settings
 #[tauri::command]
 pub async fn get_notification_settings(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<NotificationSettings, String> {
     log_info!("Getting notification settings");
 
@@ -64,13 +62,15 @@ pub async fn get_notification_settings(
 #[tauri::command]
 pub async fn set_notification_settings(
     settings: NotificationSettings,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Setting notification settings");
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.update_settings(settings).await
+        manager
+            .update_settings(settings)
+            .await
             .map_err(|e| format!("Failed to update settings: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -80,13 +80,15 @@ pub async fn set_notification_settings(
 /// Request notification permission from the system
 #[tauri::command]
 pub async fn request_notification_permission(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<bool, String> {
     log_info!("Requesting notification permission");
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.request_permission().await
+        manager
+            .request_permission()
+            .await
             .map_err(|e| format!("Failed to request permission: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -97,13 +99,15 @@ pub async fn request_notification_permission(
 #[tauri::command]
 pub async fn show_notification(
     notification: Notification,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Showing custom notification: {}", notification.title);
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.show_notification(notification).await
+        manager
+            .show_notification(notification)
+            .await
             .map_err(|e| format!("Failed to show notification: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -113,13 +117,15 @@ pub async fn show_notification(
 /// Show a test notification
 #[tauri::command]
 pub async fn show_test_notification(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Showing test notification");
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.show_test_notification().await
+        manager
+            .show_test_notification()
+            .await
             .map_err(|e| format!("Failed to show test notification: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -129,7 +135,7 @@ pub async fn show_test_notification(
 /// Check if Do Not Disturb is active
 #[tauri::command]
 pub async fn is_dnd_active(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<bool, String> {
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
@@ -142,7 +148,7 @@ pub async fn is_dnd_active(
 /// Get system Do Not Disturb status
 #[tauri::command]
 pub async fn get_system_dnd_status(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<bool, String> {
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
@@ -156,13 +162,15 @@ pub async fn get_system_dnd_status(
 #[tauri::command]
 pub async fn set_manual_dnd(
     enabled: bool,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Setting manual DND mode: {}", enabled);
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.set_manual_dnd(enabled).await
+        manager
+            .set_manual_dnd(enabled)
+            .await
             .map_err(|e| format!("Failed to set manual DND: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -173,13 +181,15 @@ pub async fn set_manual_dnd(
 #[tauri::command]
 pub async fn set_notification_consent(
     consent: bool,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Setting notification consent: {}", consent);
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.set_consent(consent).await
+        manager
+            .set_consent(consent)
+            .await
             .map_err(|e| format!("Failed to set consent: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -189,13 +199,15 @@ pub async fn set_notification_consent(
 /// Clear all notifications
 #[tauri::command]
 pub async fn clear_notifications(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Clearing all notifications");
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.clear_notifications().await
+        manager
+            .clear_notifications()
+            .await
             .map_err(|e| format!("Failed to clear notifications: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
@@ -205,7 +217,7 @@ pub async fn clear_notifications(
 /// Check if notification system is ready
 #[tauri::command]
 pub async fn is_notification_system_ready(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<bool, String> {
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
@@ -219,7 +231,7 @@ pub async fn is_notification_system_ready(
 #[tauri::command]
 pub async fn initialize_notification_manager_manual(
     app: AppHandle<Wry>,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Manual initialization of notification manager requested");
 
@@ -248,7 +260,7 @@ pub async fn initialize_notification_manager_manual(
 #[tauri::command]
 pub async fn test_notification_with_auto_consent(
     app: AppHandle<Wry>,
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<(), String> {
     log_info!("Testing notification with automatic consent");
 
@@ -256,7 +268,9 @@ pub async fn test_notification_with_auto_consent(
     let manager_lock = manager_state.read().await;
     if manager_lock.is_none() {
         drop(manager_lock);
-        if let Err(e) = initialize_notification_manager_manual(app.clone(), manager_state.clone()).await {
+        if let Err(e) =
+            initialize_notification_manager_manual(app.clone(), manager_state.clone()).await
+        {
             return Err(format!("Failed to initialize manager: {}", e));
         }
     } else {
@@ -275,7 +289,9 @@ pub async fn test_notification_with_auto_consent(
         }
 
         // Show test notification
-        manager.show_test_notification().await
+        manager
+            .show_test_notification()
+            .await
             .map_err(|e| format!("Failed to show test notification: {}", e))
     } else {
         Err("Manager still not initialized".to_string())
@@ -285,13 +301,12 @@ pub async fn test_notification_with_auto_consent(
 /// Get notification system statistics
 #[tauri::command]
 pub async fn get_notification_stats(
-    manager_state: State<'_, NotificationManagerState<Wry>>
+    manager_state: State<'_, NotificationManagerState<Wry>>,
 ) -> Result<serde_json::Value, String> {
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
         let stats = manager.get_stats().await;
-        serde_json::to_value(stats)
-            .map_err(|e| format!("Failed to serialize stats: {}", e))
+        serde_json::to_value(stats).map_err(|e| format!("Failed to serialize stats: {}", e))
     } else {
         Err("Notification manager not initialized".to_string())
     }
@@ -313,7 +328,8 @@ pub async fn debug_show_notification(
 
     let result: Result<()> = match kind {
         DebugNotificationKind::RecordingStarted => {
-            show_recording_started_notification(&app, manager_state.inner(), Some(fake_meeting)).await
+            show_recording_started_notification(&app, manager_state.inner(), Some(fake_meeting))
+                .await
         }
         DebugNotificationKind::RecordingStopped => {
             show_recording_stopped_notification(&app, manager_state.inner()).await
@@ -328,7 +344,12 @@ pub async fn debug_show_notification(
             show_transcription_complete_notification(manager_state.inner(), Some(fake_path)).await
         }
         DebugNotificationKind::MeetingReminder => {
-            show_meeting_reminder_notification(manager_state.inner(), fake_minutes, Some(fake_meeting)).await
+            show_meeting_reminder_notification(
+                manager_state.inner(),
+                fake_minutes,
+                Some(fake_meeting),
+            )
+            .await
         }
         DebugNotificationKind::SystemError => {
             show_system_error_notification(manager_state.inner(), fake_error).await
@@ -361,7 +382,10 @@ pub async fn show_recording_started_notification<R: Runtime>(
     manager_state: &NotificationManagerState<R>,
     meeting_name: Option<String>,
 ) -> Result<()> {
-    log_info!("Attempting to show recording started notification for meeting: {:?}", meeting_name);
+    log_info!(
+        "Attempting to show recording started notification for meeting: {:?}",
+        meeting_name
+    );
 
     // Check if manager is initialized
     let manager_lock = manager_state.read().await;
@@ -400,7 +424,9 @@ pub async fn show_recording_started_notification<R: Runtime>(
                 let settings = consent_manager.load_settings().await.unwrap_or_default();
 
                 if !settings.notification_preferences.show_recording_started {
-                    log_info!("Recording started notification is disabled in settings, skipping fallback");
+                    log_info!(
+                        "Recording started notification is disabled in settings, skipping fallback"
+                    );
                     return Ok(());
                 }
 
@@ -426,9 +452,15 @@ pub async fn show_recording_started_notification<R: Runtime>(
                         None => "Recording has started. Please inform others in the meeting that you are recording.".to_string(),
                     };
 
-                    log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
+                    log_info!(
+                        "Using direct Tauri notification fallback: {} - {}",
+                        title,
+                        body
+                    );
 
-                    match app_handle.notification().builder()
+                    match app_handle
+                        .notification()
+                        .builder()
                         .title(title)
                         .body(body)
                         .show()
@@ -485,9 +517,15 @@ pub async fn show_recording_stopped_notification<R: Runtime>(
             let title = "Meetily";
             let body = "Recording has stopped";
 
-            log_info!("Using direct Tauri notification fallback: {} - {}", title, body);
+            log_info!(
+                "Using direct Tauri notification fallback: {} - {}",
+                title,
+                body
+            );
 
-            match app_handle.notification().builder()
+            match app_handle
+                .notification()
+                .builder()
                 .title(title)
                 .body(body)
                 .show()
@@ -567,7 +605,9 @@ pub async fn show_meeting_reminder_notification(
 ) -> Result<()> {
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
-        manager.show_meeting_reminder(minutes_until, meeting_title).await
+        manager
+            .show_meeting_reminder(minutes_until, meeting_title)
+            .await
     } else {
         log_error!("Cannot show meeting reminder notification: manager not initialized");
         Ok(())
@@ -581,7 +621,10 @@ pub async fn show_meeting_detected_notification<R: Runtime>(
     manager_state: &NotificationManagerState<R>,
     app_name: String,
 ) -> Result<()> {
-    log_info!("Attempting to show meeting-detected notification for: {}", app_name);
+    log_info!(
+        "Attempting to show meeting-detected notification for: {}",
+        app_name
+    );
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
@@ -601,7 +644,10 @@ pub async fn show_meeting_detected_notification<R: Runtime>(
             }
         }
         Err(e) => {
-            log_error!("Failed to init notification manager for meeting-detected: {}", e);
+            log_error!(
+                "Failed to init notification manager for meeting-detected: {}",
+                e
+            );
             Ok(())
         }
     }
@@ -613,7 +659,10 @@ pub async fn show_meeting_ended_notification<R: Runtime>(
     manager_state: &NotificationManagerState<R>,
     app_name: String,
 ) -> Result<()> {
-    log_info!("Attempting to show meeting-ended notification for: {}", app_name);
+    log_info!(
+        "Attempting to show meeting-ended notification for: {}",
+        app_name
+    );
 
     let manager_lock = manager_state.read().await;
     if let Some(manager) = manager_lock.as_ref() {
@@ -633,7 +682,10 @@ pub async fn show_meeting_ended_notification<R: Runtime>(
             }
         }
         Err(e) => {
-            log_error!("Failed to init notification manager for meeting-ended: {}", e);
+            log_error!(
+                "Failed to init notification manager for meeting-ended: {}",
+                e
+            );
             Ok(())
         }
     }

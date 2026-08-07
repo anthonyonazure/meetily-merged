@@ -4,7 +4,7 @@
 // multipart form upload to an OpenAI-compatible endpoint and returns
 // the transcription.
 
-use super::provider::{TranscriptionError, TranscriptionProvider, TranscriptResult};
+use super::provider::{TranscriptResult, TranscriptionError, TranscriptionProvider};
 use async_trait::async_trait;
 use log::{info, warn};
 
@@ -45,7 +45,8 @@ impl RemoteProvider {
         // Validate URL scheme — require HTTPS except for localhost
         let parsed_url = match url::Url::parse(&url) {
             Ok(parsed) => {
-                let is_localhost = parsed.host_str()
+                let is_localhost = parsed
+                    .host_str()
                     .map(|h| h == "localhost" || h == "127.0.0.1" || h == "::1")
                     .unwrap_or(false);
                 if parsed.scheme() != "https" && !is_localhost {
@@ -66,8 +67,21 @@ impl RemoteProvider {
             .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
         // Log URL without query params to avoid leaking tokens
-        let sanitized_url = format!("{}://{}{}", parsed_url.scheme(), parsed_url.host_str().unwrap_or("unknown"), parsed_url.path());
-        info!("Remote transcription provider initialized for URL: {}, model: {}", sanitized_url, if model_name.is_empty() { "(none)" } else { &model_name });
+        let sanitized_url = format!(
+            "{}://{}{}",
+            parsed_url.scheme(),
+            parsed_url.host_str().unwrap_or("unknown"),
+            parsed_url.path()
+        );
+        info!(
+            "Remote transcription provider initialized for URL: {}, model: {}",
+            sanitized_url,
+            if model_name.is_empty() {
+                "(none)"
+            } else {
+                &model_name
+            }
+        );
 
         Ok(Self {
             url,
@@ -188,7 +202,10 @@ impl RemoteProvider {
                 response_text.clone()
             };
 
-            let msg = format!("Remote transcription returned HTTP {}: {}", status, truncated);
+            let msg = format!(
+                "Remote transcription returned HTTP {}: {}",
+                status, truncated
+            );
 
             // Retry on 5xx only. 429 means "slow down" — replying with two
             // more requests within a second is exactly wrong. 4xx otherwise

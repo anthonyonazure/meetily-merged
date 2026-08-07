@@ -35,7 +35,9 @@ use crate::notifications::types::{Notification, NotificationPriority};
 fn is_running_in_app_bundle() -> bool {
     static IN_BUNDLE: OnceCell<bool> = OnceCell::new();
     *IN_BUNDLE.get_or_init(|| {
-        let Ok(path) = std::env::current_exe() else { return false };
+        let Ok(path) = std::env::current_exe() else {
+            return false;
+        };
         path.ancestors()
             .any(|ancestor| ancestor.extension().and_then(|ext| ext.to_str()) == Some("app"))
     })
@@ -101,9 +103,7 @@ fn install_delegate_if_needed() {
         let delegate = BannerDelegate::new();
         let center = UNUserNotificationCenter::currentNotificationCenter();
         center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
-        log_info!(
-            "Installed UNUserNotificationCenterDelegate (willPresent → Banner|List|Sound)"
-        );
+        log_info!("Installed UNUserNotificationCenterDelegate (willPresent → Banner|List|Sound)");
         delegate
     });
 }
@@ -116,8 +116,12 @@ pub async fn request_authorization() -> Result<bool> {
     // run shares its config directory with the bundled `.app` — persisting `false` here would
     // silently suppress every real notification until the user manually re-granted consent.
     if !is_running_in_app_bundle() {
-        log_warn!("UN authorization skipped: not running inside a .app bundle (likely `tauri dev`)");
-        return Err(anyhow!("UN unavailable: process is not running inside a .app bundle"));
+        log_warn!(
+            "UN authorization skipped: not running inside a .app bundle (likely `tauri dev`)"
+        );
+        return Err(anyhow!(
+            "UN unavailable: process is not running inside a .app bundle"
+        ));
     }
     install_delegate_if_needed();
 
@@ -129,9 +133,9 @@ pub async fn request_authorization() -> Result<bool> {
         let block = RcBlock::new(move |granted: objc2::runtime::Bool, error: *mut NSError| {
             let result = if !error.is_null() {
                 // SAFETY: `error` originates from UN's completion handler and is either null
-            // (checked above) or points to a valid `NSError` for the duration of this
-            // callback. `error_message` only dereferences when non-null.
-            let msg = unsafe { error_message(error) };
+                // (checked above) or points to a valid `NSError` for the duration of this
+                // callback. `error_message` only dereferences when non-null.
+                let msg = unsafe { error_message(error) };
                 log_error!("UN requestAuthorization error: {}", msg);
                 Err(anyhow!("UN requestAuthorization error: {}", msg))
             } else {
@@ -158,7 +162,10 @@ pub async fn request_authorization() -> Result<bool> {
 /// Present a notification via `UNUserNotificationCenter`.
 pub async fn show(notification: &Notification) -> Result<()> {
     if !is_running_in_app_bundle() {
-        log_warn!("UN present skipped (no .app bundle): id={:?}", notification.id);
+        log_warn!(
+            "UN present skipped (no .app bundle): id={:?}",
+            notification.id
+        );
         return Ok(());
     }
     install_delegate_if_needed();
@@ -197,9 +204,9 @@ pub async fn show(notification: &Notification) -> Result<()> {
                 Ok(())
             } else {
                 // SAFETY: `error` originates from UN's completion handler and is either null
-            // (checked above) or points to a valid `NSError` for the duration of this
-            // callback. `error_message` only dereferences when non-null.
-            let msg = unsafe { error_message(error) };
+                // (checked above) or points to a valid `NSError` for the duration of this
+                // callback. `error_message` only dereferences when non-null.
+                let msg = unsafe { error_message(error) };
                 Err(anyhow!("UN addNotificationRequest failed: {}", msg))
             };
             if let Some(tx) = tx_slot.lock().ok().and_then(|mut guard| guard.take()) {

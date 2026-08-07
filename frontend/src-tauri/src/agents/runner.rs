@@ -64,26 +64,25 @@ async fn resolve_llm_settings(
         None
     };
 
-    let (custom_openai_endpoint, custom_api_key, max_tokens, temperature, top_p) =
-        if provider == LLMProvider::CustomOpenAI {
-            match SettingsRepository::get_custom_openai_config(pool).await {
-                Ok(Some(config)) => (
-                    Some(config.endpoint),
-                    config.api_key,
-                    config.max_tokens.map(|t| t as u32),
-                    config.temperature,
-                    config.top_p,
-                ),
-                Ok(None) => {
-                    return Err(
-                        "Custom OpenAI provider selected but no configuration found".to_string()
-                    )
-                }
-                Err(e) => return Err(format!("Failed to retrieve custom OpenAI config: {}", e)),
+    let (custom_openai_endpoint, custom_api_key, max_tokens, temperature, top_p) = if provider
+        == LLMProvider::CustomOpenAI
+    {
+        match SettingsRepository::get_custom_openai_config(pool).await {
+            Ok(Some(config)) => (
+                Some(config.endpoint),
+                config.api_key,
+                config.max_tokens.map(|t| t as u32),
+                config.temperature,
+                config.top_p,
+            ),
+            Ok(None) => {
+                return Err("Custom OpenAI provider selected but no configuration found".to_string())
             }
-        } else {
-            (None, None, None, None, None)
-        };
+            Err(e) => return Err(format!("Failed to retrieve custom OpenAI config: {}", e)),
+        }
+    } else {
+        (None, None, None, None, None)
+    };
 
     let final_api_key = if provider == LLMProvider::CustomOpenAI {
         custom_api_key.unwrap_or_default()
@@ -104,10 +103,7 @@ async fn resolve_llm_settings(
 
 /// Builds the meeting context (title, transcript, summary markdown) an agent
 /// prompt operates on.
-async fn build_agent_context(
-    pool: &SqlitePool,
-    meeting_id: &str,
-) -> Result<AgentContext, String> {
+async fn build_agent_context(pool: &SqlitePool, meeting_id: &str) -> Result<AgentContext, String> {
     let meeting = MeetingsRepository::get_meeting_metadata(pool, meeting_id)
         .await
         .map_err(|e| format!("Failed to load meeting: {}", e))?
@@ -137,20 +133,20 @@ async fn build_agent_context(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let summary_markdown = match SummaryProcessesRepository::get_summary_data(pool, meeting_id).await
-    {
-        Ok(Some(process)) => process.result.and_then(|raw| {
-            serde_json::from_str::<serde_json::Value>(&raw)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("markdown")
-                        .and_then(|m| m.as_str())
-                        .map(str::to_string)
-                })
-        }),
-        _ => None,
-    };
+    let summary_markdown =
+        match SummaryProcessesRepository::get_summary_data(pool, meeting_id).await {
+            Ok(Some(process)) => process.result.and_then(|raw| {
+                serde_json::from_str::<serde_json::Value>(&raw)
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("markdown")
+                            .and_then(|m| m.as_str())
+                            .map(str::to_string)
+                    })
+            }),
+            _ => None,
+        };
 
     Ok(AgentContext {
         meeting_title: meeting.title,
@@ -175,8 +171,7 @@ struct ParsedActionItem {
 /// Returns None when no parsable array exists.
 fn parse_action_items(raw: &str) -> Option<Vec<ParsedActionItem>> {
     let cleaned = crate::summary::processor::clean_llm_markdown_output(raw);
-    let candidate = extract_first_json_array(&cleaned)
-        .or_else(|| extract_first_json_array(raw))?;
+    let candidate = extract_first_json_array(&cleaned).or_else(|| extract_first_json_array(raw))?;
     serde_json::from_str::<Vec<ParsedActionItem>>(&candidate)
         .ok()
         .map(|items| {
@@ -242,10 +237,7 @@ fn action_items_to_markdown(items: &[ParsedActionItem]) -> String {
 
 /// Returns the effective (enabled, auto_run) pair for an agent: the saved
 /// setting when one exists, otherwise the registry defaults.
-pub async fn effective_settings(
-    pool: &SqlitePool,
-    agent: &AgentDefinition,
-) -> (bool, bool) {
+pub async fn effective_settings(pool: &SqlitePool, agent: &AgentDefinition) -> (bool, bool) {
     match AgentSettingsRepository::get(pool, agent.id).await {
         Ok(Some(row)) => (row.enabled, row.auto_run),
         Ok(None) => (true, agent.auto_run_default),
@@ -277,7 +269,10 @@ pub async fn start_agent_run(
         .await
         .map_err(|e| format!("Failed to check running agent runs: {}", e))?
     {
-        return Err(format!("{} is already running for this meeting", agent.name));
+        return Err(format!(
+            "{} is already running for this meeting",
+            agent.name
+        ));
     }
 
     let run_id = AgentRunsRepository::create_run(&pool, &agent_id, &meeting_id)

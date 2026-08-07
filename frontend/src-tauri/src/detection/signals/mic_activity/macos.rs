@@ -80,7 +80,11 @@ impl MacMicActivitySampler {
             }
         }
 
-        debug!("mic snapshot: {} active bundle(s) {:?}", active.len(), active);
+        debug!(
+            "mic snapshot: {} active bundle(s) {:?}",
+            active.len(),
+            active
+        );
         Ok(MicSnapshot {
             active_bundles: active,
         })

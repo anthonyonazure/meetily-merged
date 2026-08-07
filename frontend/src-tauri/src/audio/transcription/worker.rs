@@ -69,12 +69,18 @@ impl EchoDeduplicator {
     /// Check if a "You" segment is an echo of a recent "Others" segment
     fn is_echo(&self, text: &str, start_time: f64) -> bool {
         let you_words = Self::normalize_to_words(text);
-        if you_words.len() < 2 { return false; } // Single words too ambiguous
+        if you_words.len() < 2 {
+            return false;
+        } // Single words too ambiguous
 
         // Length-adaptive threshold
-        let threshold = if you_words.len() <= 3 { 0.75 }
-                        else if you_words.len() <= 6 { 0.65 }
-                        else { 0.55 };
+        let threshold = if you_words.len() <= 3 {
+            0.75
+        } else if you_words.len() <= 6 {
+            0.65
+        } else {
+            0.55
+        };
 
         for (other_words, other_time) in &self.others_buffer {
             if (start_time - other_time).abs() > self.time_window_secs {
@@ -82,7 +88,10 @@ impl EchoDeduplicator {
             }
             let sim = Self::bag_jaccard(&you_words, other_words);
             if sim >= threshold {
-                info!("🔇 Echo detected: '{}' matches Others segment (similarity={:.2})", text, sim);
+                info!(
+                    "🔇 Echo detected: '{}' matches Others segment (similarity={:.2})",
+                    text, sim
+                );
                 return true;
             }
         }
@@ -103,8 +112,12 @@ impl EchoDeduplicator {
     fn bag_jaccard(a: &[String], b: &[String]) -> f64 {
         let mut count_a: HashMap<&str, usize> = HashMap::new();
         let mut count_b: HashMap<&str, usize> = HashMap::new();
-        for w in a { *count_a.entry(w.as_str()).or_default() += 1; }
-        for w in b { *count_b.entry(w.as_str()).or_default() += 1; }
+        for w in a {
+            *count_a.entry(w.as_str()).or_default() += 1;
+        }
+        for w in b {
+            *count_b.entry(w.as_str()).or_default() += 1;
+        }
 
         let all_keys: std::collections::HashSet<&str> =
             count_a.keys().chain(count_b.keys()).copied().collect();
@@ -117,7 +130,11 @@ impl EchoDeduplicator {
             intersection += ca.min(cb);
             union_size += ca.max(cb);
         }
-        if union_size == 0 { 0.0 } else { intersection as f64 / union_size as f64 }
+        if union_size == 0 {
+            0.0
+        } else {
+            intersection as f64 / union_size as f64
+        }
     }
 }
 
@@ -126,7 +143,10 @@ pub fn reset_speech_detected_flag() {
     SPEECH_DETECTED_EMITTED.store(false, Ordering::SeqCst);
     MODEL_UNLOADED_EMITTED.store(false, Ordering::SeqCst);
     AUTH_ERROR_EMITTED.store(false, Ordering::SeqCst);
-    info!("🔍 SPEECH_DETECTED_EMITTED reset to: {}", SPEECH_DETECTED_EMITTED.load(Ordering::SeqCst));
+    info!(
+        "🔍 SPEECH_DETECTED_EMITTED reset to: {}",
+        SPEECH_DETECTED_EMITTED.load(Ordering::SeqCst)
+    );
     // Also reset echo deduplicator
     if let Ok(mut dedup) = ECHO_DEDUP.lock() {
         dedup.reset();
@@ -145,7 +165,7 @@ pub struct TranscriptUpdate {
     // NEW: Recording-relative timestamps for playback sync
     pub audio_start_time: f64, // Seconds from recording start (e.g., 125.3)
     pub audio_end_time: f64,   // Seconds from recording start (e.g., 128.6)
-    pub duration: f64,          // Segment duration in seconds (e.g., 3.3)
+    pub duration: f64,         // Segment duration in seconds (e.g., 3.3)
     // Speaker attribution from audio source
     pub speaker: String, // "You" (mic) or "Others" (system audio)
 }
@@ -162,7 +182,8 @@ pub fn start_transcription_task<R: Runtime>(
         info!("🚀 Starting optimized parallel transcription task - guaranteeing zero chunk loss");
 
         // Initialize transcription engine (Whisper or Parakeet based on config)
-        let transcription_engine = match super::engine::get_or_init_transcription_engine(&app).await {
+        let transcription_engine = match super::engine::get_or_init_transcription_engine(&app).await
+        {
             Ok(engine) => engine,
             Err(e) => {
                 error!("Failed to initialize transcription engine: {}", e);
@@ -185,7 +206,11 @@ pub fn start_transcription_task<R: Runtime>(
         let chunks_completed = Arc::new(AtomicU64::new(0));
         let input_finished = Arc::new(AtomicBool::new(false));
 
-        info!("📊 Starting {} transcription worker{} (serial mode for ordered emission)", NUM_WORKERS, if NUM_WORKERS == 1 { "" } else { "s" });
+        info!(
+            "📊 Starting {} transcription worker{} (serial mode for ordered emission)",
+            NUM_WORKERS,
+            if NUM_WORKERS == 1 { "" } else { "s" }
+        );
 
         // Spawn worker tasks
         let mut worker_handles = Vec::new();
@@ -219,7 +244,10 @@ pub fn start_transcription_task<R: Runtime>(
                         worker_id, engine_name, current_model
                     );
                 } else {
-                    warn!("⚠️ Worker {} pre-validation: {} model not loaded - chunks may be skipped", worker_id, engine_name);
+                    warn!(
+                        "⚠️ Worker {} pre-validation: {} model not loaded - chunks may be skipped",
+                        worker_id, engine_name
+                    );
                 }
 
                 loop {
@@ -246,7 +274,10 @@ pub fn start_transcription_task<R: Runtime>(
 
                             // Check if model is still loaded before processing
                             if !engine_clone.is_model_loaded().await {
-                                warn!("⚠️ Worker {}: Model unloaded, skipping chunk {}", worker_id, chunk.chunk_id);
+                                warn!(
+                                    "⚠️ Worker {}: Model unloaded, skipping chunk {}",
+                                    worker_id, chunk.chunk_id
+                                );
                                 // Emit error ONCE per session so user knows transcription is broken
                                 if !MODEL_UNLOADED_EMITTED.swap(true, Ordering::SeqCst) {
                                     error!("❌ Worker {}: Model not loaded - emitting user-visible error", worker_id);
@@ -272,7 +303,8 @@ pub fn start_transcription_task<R: Runtime>(
                                 Ok((transcript, confidence_opt, is_partial)) => {
                                     // Provider-aware confidence threshold
                                     let confidence_threshold = match &engine_clone {
-                                        TranscriptionEngine::Whisper(_) | TranscriptionEngine::Provider(_) => 0.3,
+                                        TranscriptionEngine::Whisper(_)
+                                        | TranscriptionEngine::Provider(_) => 0.3,
                                         TranscriptionEngine::Parakeet(_) => 0.0, // Parakeet has no confidence, accept all
                                     };
 
@@ -285,7 +317,8 @@ pub fn start_transcription_task<R: Runtime>(
                                           worker_id, transcript, confidence_str, is_partial, confidence_threshold);
 
                                     // Check confidence threshold (or accept if no confidence provided)
-                                    let meets_threshold = confidence_opt.map_or(true, |c| c >= confidence_threshold);
+                                    let meets_threshold =
+                                        confidence_opt.map_or(true, |c| c >= confidence_threshold);
 
                                     if !transcript.trim().is_empty() && meets_threshold {
                                         // PERFORMANCE: Only log transcription results, not every processing step
@@ -294,7 +327,8 @@ pub fn start_transcription_task<R: Runtime>(
 
                                         // Emit speech-detected event for frontend UX (only on first detection per session)
                                         // This is lightweight and provides better user feedback
-                                        let current_flag = SPEECH_DETECTED_EMITTED.load(Ordering::SeqCst);
+                                        let current_flag =
+                                            SPEECH_DETECTED_EMITTED.load(Ordering::SeqCst);
                                         info!("🔍 Checking speech-detected flag: current={}, will_emit={}", current_flag, !current_flag);
 
                                         if !current_flag {
@@ -314,15 +348,19 @@ pub fn start_transcription_task<R: Runtime>(
                                         if let Ok(mut dedup) = ECHO_DEDUP.lock() {
                                             if speaker == "Others" {
                                                 dedup.record_others(&transcript, audio_start_time);
-                                            } else if speaker == "You" && dedup.is_echo(&transcript, audio_start_time) {
+                                            } else if speaker == "You"
+                                                && dedup.is_echo(&transcript, audio_start_time)
+                                            {
                                                 // This "You" segment is echo of system audio - skip it
-                                                chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                                chunks_completed_clone
+                                                    .fetch_add(1, Ordering::SeqCst);
                                                 continue;
                                             }
                                         }
 
                                         // Generate sequence ID and calculate timestamps
-                                        let sequence_id = SEQUENCE_COUNTER.fetch_add(1, Ordering::SeqCst);
+                                        let sequence_id =
+                                            SEQUENCE_COUNTER.fetch_add(1, Ordering::SeqCst);
                                         let audio_end_time = chunk_timestamp + chunk_duration;
 
                                         // Emit transcript update
@@ -368,7 +406,10 @@ pub fn start_transcription_task<R: Runtime>(
                                             continue;
                                         }
                                         TranscriptionError::ModelNotLoaded => {
-                                            warn!("Worker {}: Model unloaded during transcription", worker_id);
+                                            warn!(
+                                                "Worker {}: Model unloaded during transcription",
+                                                worker_id
+                                            );
                                             chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
                                             continue;
                                         }

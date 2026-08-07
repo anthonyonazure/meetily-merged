@@ -114,16 +114,24 @@ impl TranscriptConfig {
     /// a Phase 2 migration clears `model` for remote rows.
     /// See: migrations/20260330000000_add_endpoint_url_to_transcript_settings.sql
     pub fn resolve_remote_params(&self) -> (String, String) {
-        let has_endpoint_url = self.endpoint_url.as_ref()
+        let has_endpoint_url = self
+            .endpoint_url
+            .as_ref()
             .filter(|u| !u.is_empty())
             .is_some();
-        let url = self.endpoint_url.clone()
+        let url = self
+            .endpoint_url
+            .clone()
             .filter(|u| !u.is_empty())
             .unwrap_or_else(|| self.model.clone());
         let model_name = if has_endpoint_url {
             let m = self.model.clone();
             // Don't send the URL as the model name (migrated data has URL in both columns)
-            if m == url { String::new() } else { m }
+            if m == url {
+                String::new()
+            } else {
+                m
+            }
         } else {
             String::new()
         };
@@ -698,13 +706,9 @@ pub async fn api_save_transcript_config<R: Runtime>(
     );
     let pool = state.db_manager.pool();
 
-    if let Err(e) = SettingsRepository::save_transcript_config(
-        pool,
-        &provider,
-        &model,
-        endpoint_url.as_deref(),
-    )
-    .await
+    if let Err(e) =
+        SettingsRepository::save_transcript_config(pool, &provider, &model, endpoint_url.as_deref())
+            .await
     {
         log_error!("Failed to save transcript config: {}", e);
         return Err(e.to_string());
@@ -859,7 +863,10 @@ pub async fn api_get_meeting_metadata<R: Runtime>(
     meeting_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<MeetingMetadata, String> {
-    log_info!("api_get_meeting_metadata called for meeting_id: {}", meeting_id);
+    log_info!(
+        "api_get_meeting_metadata called for meeting_id: {}",
+        meeting_id
+    );
 
     let pool = state.db_manager.pool();
 
@@ -903,7 +910,9 @@ pub async fn api_get_meeting_transcripts<R: Runtime>(
 
     let pool = state.db_manager.pool();
 
-    match MeetingsRepository::get_meeting_transcripts_paginated(pool, &meeting_id, limit, offset).await {
+    match MeetingsRepository::get_meeting_transcripts_paginated(pool, &meeting_id, limit, offset)
+        .await
+    {
         Ok((transcripts, total_count)) => {
             log_info!(
                 "Successfully retrieved {} transcripts for meeting {} (total: {})",
@@ -935,7 +944,11 @@ pub async fn api_get_meeting_transcripts<R: Runtime>(
             })
         }
         Err(e) => {
-            log_error!("Error retrieving transcripts for meeting {}: {}", meeting_id, e);
+            log_error!(
+                "Error retrieving transcripts for meeting {}: {}",
+                meeting_id,
+                e
+            );
             Err(format!("Failed to retrieve transcripts: {}", e))
         }
     }
@@ -1003,7 +1016,10 @@ pub async fn api_save_transcript<R: Runtime>(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             log_error!("Failed to parse transcript segments: {}", e);
-            format!("Invalid transcript data format: {}. Please check the data structure.", e)
+            format!(
+                "Invalid transcript data format: {}. Please check the data structure.",
+                e
+            )
         })?;
 
     // Log parsed segments count and first segment details
@@ -1288,7 +1304,10 @@ pub async fn api_save_custom_openai_config<R: Runtime>(
 
     match SettingsRepository::save_custom_openai_config(pool, &config).await {
         Ok(()) => {
-            log_info!("✅ Successfully saved custom OpenAI config for endpoint: {}", config.endpoint);
+            log_info!(
+                "✅ Successfully saved custom OpenAI config for endpoint: {}",
+                config.endpoint
+            );
             Ok(serde_json::json!({
                 "status": "success",
                 "message": "Custom OpenAI configuration saved successfully"
@@ -1314,8 +1333,11 @@ pub async fn api_get_custom_openai_config<R: Runtime>(
     match SettingsRepository::get_custom_openai_config(pool).await {
         Ok(config) => {
             if let Some(ref c) = config {
-                log_info!("✅ Found custom OpenAI config: endpoint='{}', model='{}'",
-                    c.endpoint, c.model);
+                log_info!(
+                    "✅ Found custom OpenAI config: endpoint='{}', model='{}'",
+                    c.endpoint,
+                    c.model
+                );
             } else {
                 log_info!("No custom OpenAI config found");
             }
@@ -1398,7 +1420,7 @@ pub async fn api_test_custom_openai_connection<R: Runtime>(
                                             .get("message")
                                             .and_then(|m| {
                                                 m.get("content")
-                                                .or_else(|| m.get("reasoning_content"))
+                                                    .or_else(|| m.get("reasoning_content"))
                                             })
                                             .is_some();
 
@@ -1416,17 +1438,33 @@ pub async fn api_test_custom_openai_connection<R: Runtime>(
                         }
 
                         // Response was 200 but doesn't match OpenAI format
-                        log_warn!("⚠️ Endpoint returned 200 but response doesn't match OpenAI format: {}", response_text);
+                        log_warn!(
+                            "⚠️ Endpoint returned 200 but response doesn't match OpenAI format: {}",
+                            response_text
+                        );
                         Err("Endpoint is reachable but doesn't appear to be OpenAI-compatible. Response is missing 'choices' array or 'message.content' / 'message.reasoning_content' field.".to_string())
                     }
                     Err(e) => {
-                        log_warn!("⚠️ Endpoint returned 200 but response is not valid JSON: {}", e);
-                        Err(format!("Endpoint is reachable but returned invalid JSON: {}. Response: {}", e, response_text))
+                        log_warn!(
+                            "⚠️ Endpoint returned 200 but response is not valid JSON: {}",
+                            e
+                        );
+                        Err(format!(
+                            "Endpoint is reachable but returned invalid JSON: {}. Response: {}",
+                            e, response_text
+                        ))
                     }
                 }
             } else {
-                log_warn!("⚠️ Custom OpenAI connection test failed with status {}: {}", status, response_text);
-                Err(format!("Connection failed with status {}: {}", status, response_text))
+                log_warn!(
+                    "⚠️ Custom OpenAI connection test failed with status {}: {}",
+                    status,
+                    response_text
+                );
+                Err(format!(
+                    "Connection failed with status {}: {}",
+                    status, response_text
+                ))
             }
         }
         Err(e) => {
@@ -1456,8 +1494,8 @@ pub async fn api_test_remote_transcription_connection<R: Runtime>(
     );
 
     // Validate endpoint URL format (hard error on parse failure, matching RemoteProvider::new)
-    let parsed_url = url::Url::parse(&endpoint)
-        .map_err(|e| format!("Invalid endpoint URL: {}", e))?;
+    let parsed_url =
+        url::Url::parse(&endpoint).map_err(|e| format!("Invalid endpoint URL: {}", e))?;
 
     // Require HTTPS for non-localhost (matching RemoteProvider::new validation)
     let is_localhost = parsed_url
@@ -1551,12 +1589,18 @@ pub async fn api_test_remote_transcription_connection<R: Runtime>(
                                 "http_status": status.as_u16()
                             }))
                         } else {
-                            log_warn!("⚠️ Endpoint returned 200 but response is missing 'text' field: {}", truncated_response);
+                            log_warn!(
+                                "⚠️ Endpoint returned 200 but response is missing 'text' field: {}",
+                                truncated_response
+                            );
                             Err("Endpoint returned 200 but response is missing 'text' field. Expected OpenAI-compatible transcription format.".to_string())
                         }
                     }
                     Err(e) => {
-                        log_warn!("⚠️ Endpoint returned 200 but response is not valid JSON: {}", e);
+                        log_warn!(
+                            "⚠️ Endpoint returned 200 but response is not valid JSON: {}",
+                            e
+                        );
                         Err(format!(
                             "Endpoint returned 200 but response is not valid JSON: {}",
                             e
@@ -1587,10 +1631,7 @@ pub async fn api_test_remote_transcription_connection<R: Runtime>(
         Err(e) => {
             log_error!("❌ Remote transcription connection test failed: {}", e);
             if e.is_timeout() {
-                Err(
-                    "Connection timed out after 40s. Please check the endpoint URL."
-                        .to_string(),
-                )
+                Err("Connection timed out after 40s. Please check the endpoint URL.".to_string())
             } else if e.is_connect() {
                 Err("Could not connect to endpoint. Please verify the URL is correct and the server is running.".to_string())
             } else {

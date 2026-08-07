@@ -9,7 +9,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::database::repositories::{meeting::MeetingsRepository, summary::SummaryProcessesRepository};
+use crate::database::repositories::{
+    meeting::MeetingsRepository, summary::SummaryProcessesRepository,
+};
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
@@ -168,7 +170,12 @@ pub async fn export_meetings_markdown<R: Runtime>(
             continue;
         }
 
-        let created_date = details.created_at.split('T').next().unwrap_or("").to_string();
+        let created_date = details
+            .created_at
+            .split('T')
+            .next()
+            .unwrap_or("")
+            .to_string();
         let filename = format!(
             "{}_{}.md",
             if created_date.is_empty() {
@@ -223,7 +230,10 @@ mod tests {
 
     #[test]
     fn path_breaking_characters_are_replaced() {
-        assert_eq!(safe_filename("a/b\\c:d*e?f\"g<h>i|j"), "a-b-c-d-e-f-g-h-i-j");
+        assert_eq!(
+            safe_filename("a/b\\c:d*e?f\"g<h>i|j"),
+            "a-b-c-d-e-f-g-h-i-j"
+        );
         assert_eq!(safe_filename("   "), "untitled");
         assert_eq!(safe_filename(""), "untitled");
     }
